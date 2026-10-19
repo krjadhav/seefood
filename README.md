@@ -1,6 +1,8 @@
 # SeeFood
 
-A playful, mobile-first frontend PWA inspired by the “hotdog / not hotdog” SeeFood reference. Built with React, TypeScript, and Vite.
+A mobile-first frontend PWA recreating the SeeFood interface from _Silicon Valley_. Built with React, TypeScript, and Vite.
+
+The main screen follows the supplied reference: a bright red logo header, black-outlined white lettering, a white tagline strip, stacked salmon/pasta photography, and large text over the photos. Sample evaluation uses a ring of red dots and outlined lettering; results use a green top banner or red bottom banner with a large check or cross. On mobile, the central prompt becomes a camera action. The surrounding site, help panels, and PWA chrome use a dark theme.
 
 ## Run locally
 
@@ -60,12 +62,14 @@ The GitHub repository stores source code; pushing it does not deploy a public we
 All UI icons are Lucide icons (ISC license). The hotdog illustration and app icons are custom SVG artwork. Fonts are self-hosted under the SIL Open Font License, included in `public/fonts/licenses/`:
 
 - [DM Sans](https://fonts.google.com/specimen/DM+Sans)
-- [Lilita One](https://fonts.google.com/specimen/Lilita+One)
+- [Titan One](https://fonts.google.com/specimen/Titan+One)
 
 Sample photography is downloaded from Unsplash and bundled for offline use:
 
 - [Hotdog, Jessica Loaiza](https://unsplash.com/photos/glqTtszXfM0)
 - [Pizza](https://images.unsplash.com/photo-1513104890138-7c749659a591)
 - [Burger](https://images.unsplash.com/photo-1551782450-a2132b4ba21d)
+- [Salmon, Anna Volkova](https://unsplash.com/photos/LeU-Tdabc5E)
+- [Shrimp pasta, Eduardo Gonzalez](https://unsplash.com/photos/rqnK9xwDg5c)
 
 See the [Unsplash license](https://unsplash.com/license).

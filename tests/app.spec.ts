@@ -5,9 +5,7 @@ test('responsive layout and native mobile camera input', async ({
   page,
 }, testInfo) => {
   await page.goto('/')
-  await expect(
-    page.getByRole('heading', { name: 'See food. Know food.' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'SEEFOOD' })).toBeVisible()
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -48,7 +46,7 @@ test('upload stays local, previews the image, and resets', async ({ page }) => {
   ).toBeVisible()
   await page.getByRole('button', { name: 'Choose another photo' }).click()
   await expect(
-    page.getByRole('heading', { name: 'What’s on your plate?' }),
+    page.getByRole('heading', { name: 'Let’s Get Started' }),
   ).toBeVisible()
   expect(outgoingUploads).toEqual([])
 })
@@ -149,21 +147,21 @@ test('samples show distinct, clearly marked demo results', async ({ page }) => {
     .getByRole('button', { name: 'Try sample: The classic hotdog' })
     .click()
   await expect(
-    page.getByRole('heading', { name: 'Taking a look…' }),
+    page.getByRole('heading', { name: 'Evaluating...' }),
   ).toBeVisible()
   await expect(
-    page.getByRole('heading', { name: 'Hotdog!', exact: true }),
+    page.getByRole('heading', { name: 'Hotdog', exact: true }),
   ).toBeVisible()
   await expect(page.getByText('SAMPLE DEMO RESULT')).toBeVisible()
   await page
     .getByRole('button', { name: 'Try sample: A slice of possibility' })
     .click()
   await expect(
-    page.getByRole('heading', { name: 'Not hotdog.', exact: true }),
+    page.getByRole('heading', { name: 'Not hotdog', exact: true }),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Try another photo' }).click()
   await expect(
-    page.getByRole('heading', { name: 'What’s on your plate?' }),
+    page.getByRole('heading', { name: 'Let’s Get Started' }),
   ).toBeVisible()
 })
 
@@ -208,15 +206,13 @@ test('production PWA reloads offline with samples and local fonts', async ({
     .toBe(true)
   await context.setOffline(true)
   await page.reload()
-  await expect(
-    page.getByRole('heading', { name: 'See food. Know food.' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'SEEFOOD' })).toBeVisible()
   await expect(page.getByRole('status')).toContainText('You’re offline')
   await page
     .getByRole('button', { name: 'Try sample: The classic hotdog' })
     .click()
   await expect(
-    page.getByRole('heading', { name: 'Hotdog!', exact: true }),
+    page.getByRole('heading', { name: 'Hotdog', exact: true }),
   ).toBeVisible()
   expect(
     await page
@@ -224,7 +220,7 @@ test('production PWA reloads offline with samples and local fonts', async ({
       .evaluate((image: HTMLImageElement) => image.naturalWidth),
   ).toBeGreaterThan(0)
   expect(
-    await page.evaluate(() => document.fonts.check('16px "Lilita One"')),
+    await page.evaluate(() => document.fonts.check('16px "Titan One"')),
   ).toBe(true)
   await context.setOffline(false)
 })
