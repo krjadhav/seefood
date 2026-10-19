@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "SeeFood — The Shazam for food",
+  "short_name": "SeeFood",
+  "description": "A photo, a little curiosity, and one very important question: hotdog or not hotdog?",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fcf8ef",
+  "theme_color": "#ed352b",
+  "lang": "en",
+  "categories": ["food", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
