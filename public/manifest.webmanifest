@@ -6,8 +6,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#fcf8ef",
-  "theme_color": "#ed352b",
+  "background_color": "#121111",
+  "theme_color": "#121111",
   "lang": "en",
   "categories": ["food", "entertainment"],
   "icons": [
