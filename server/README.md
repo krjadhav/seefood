@@ -37,6 +37,29 @@ Rebuild after editing the CSV:
 python server/build_catalog.py
 ```
 
+## Tarla recipe dataset (.numbers)
+
+`build_tarla.py` parses `indian_food_dataset_3/all_indian_recipes_tarla.numbers`
+(~6969 recipes) into:
+
+- `tarla_catalog.json` — name, ingredients, image URL, and an embed sentence.
+  Pipe-separated titles collapse to the main name
+  (`"upma recipe | rava upma | …"` → `upma`).
+- `tarla_prototypes.npz` — one **single-image** visual prototype per dish, from
+  the recipe photo URLs (float16 to keep it small).
+
+These merge with the khana prototypes and CSV catalog at startup. Khana
+centroids average many photos, so a small `KHANA_BONUS` keeps them
+authoritative on near-ties; Tarla single-image anchors extend visual coverage
+to thousands more dishes. The ~7k text labels are embedded once and cached in
+`label_emb_cache.npz` (gitignored, rebuilt when the label set changes).
+
+```sh
+python server/build_tarla.py            # catalog + download photos + embed
+python server/build_tarla.py --catalog-only
+python server/build_tarla.py --limit 1500
+```
+
 ## Dish prototypes
 
 `prototypes.npz` holds one averaged "visual centroid" per dish, built from the

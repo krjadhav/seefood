@@ -20,3 +20,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Derived label-embedding cache (rebuilt on startup from the committed labels)
+server/label_emb_cache.npz
