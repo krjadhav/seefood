@@ -1,52 +1,58 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Camera,
-  Check,
-  Download,
-  Info,
-  RotateCcw,
-  Upload,
-  X,
-} from 'lucide-react'
+import { Camera, Check, Info, RotateCcw, Upload, X } from 'lucide-react'
 
-type Photo = { url: string; name: string; kind?: 'hotdog' | 'not-hotdog' }
-type InstallPrompt = Event & {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: string }>
+type Photo = { url: string; name: string }
+type Label = {
+  label: string
+  similarity: number
+  probability: number
+  isFood: boolean
 }
+type Meta = {
+  model: string
+  architecture: string
+  device: string
+  dtype: string
+  embeddingDim: number
+  embeddingNorm: number
+  imageTokens: number
+  candidateLabels: number
+  softmaxTemperature: number
+  inferenceMs: number
+  imageSize: { width: number; height: number }
+  uploadBytes: number
+  torch: string
+  host: string
+}
+type Verdict = {
+  isFood: boolean
+  name: string
+  topLabel: string
+  foodProbability: number
+  topSimilarity: number
+  top: Label[]
+  metadata: Meta
+}
+
 const samples: Photo[] = [
-  { url: '/images/hotdog.jpg', name: 'The classic hotdog', kind: 'hotdog' },
-  {
-    url: '/images/pizza.jpg',
-    name: 'A slice of possibility',
-    kind: 'not-hotdog',
-  },
-  {
-    url: '/images/burger.jpg',
-    name: 'A very good imposter',
-    kind: 'not-hotdog',
-  },
+  { url: '/images/hotdog.jpg', name: 'The classic hotdog' },
+  { url: '/images/pizza.jpg', name: 'A slice of possibility' },
+  { url: '/images/burger.jpg', name: 'A very good imposter' },
 ]
 
 export default function App() {
   const [photo, setPhoto] = useState<Photo | null>(null)
-  const [stage, setStage] = useState<
-    'empty' | 'loading' | 'result' | 'preview'
-  >('empty')
+  const [stage, setStage] = useState<'empty' | 'loading' | 'result' | 'error'>(
+    'empty',
+  )
+  const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
-  const [help, setHelp] = useState(false)
-  const [installHelp, setInstallHelp] = useState(false)
-  const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null)
-  const [installed, setInstalled] = useState(
-    () => window.matchMedia('(display-mode: standalone)').matches,
-  )
   const [offline, setOffline] = useState(!navigator.onLine)
   const [clipboardBusy, setClipboardBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const objectUrl = useRef<string | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const operation = useRef(0)
   const dragDepth = useRef(0)
   const resultHeading = useRef<HTMLHeadingElement>(null)
@@ -54,9 +60,35 @@ export default function App() {
 
   const cleanup = useCallback(() => {
     operation.current += 1
-    if (timer.current) clearTimeout(timer.current)
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
     objectUrl.current = null
+  }, [])
+
+  const analyze = useCallback(async (blob: Blob, display: Photo) => {
+    const currentOperation = operation.current
+    setPhoto(display)
+    setVerdict(null)
+    setError('')
+    setStage('loading')
+    try {
+      const form = new FormData()
+      form.append('image', blob, display.name || 'image')
+      const response = await fetch('/api/classify', {
+        method: 'POST',
+        body: form,
+      })
+      if (!response.ok) throw new Error(String(response.status))
+      const data: Verdict = await response.json()
+      if (currentOperation !== operation.current) return
+      setVerdict(data)
+      setStage('result')
+    } catch {
+      if (currentOperation !== operation.current) return
+      setStage('error')
+      setError(
+        'Couldn’t reach the recognition service. Start the backend (see server/README.md) and try again.',
+      )
+    }
   }, [])
 
   const receiveFile = useCallback(
@@ -92,8 +124,7 @@ export default function App() {
       try {
         await image.decode()
         if (currentOperation !== operation.current) return
-        setPhoto({ url, name: file.name || 'Your pasted image' })
-        setStage('preview')
+        void analyze(file, { url, name: file.name || 'Your pasted image' })
       } catch {
         if (currentOperation !== operation.current) return
         URL.revokeObjectURL(url)
@@ -105,7 +136,7 @@ export default function App() {
         )
       }
     },
-    [cleanup],
+    [cleanup, analyze],
   )
 
   useEffect(() => {
@@ -120,50 +151,44 @@ export default function App() {
       }
     }
     const online = () => setOffline(!navigator.onLine)
-    const prompt = (event: Event) => {
-      event.preventDefault()
-      setInstallPrompt(event as InstallPrompt)
-    }
-    const onInstalled = () => {
-      setInstalled(true)
-      setInstallPrompt(null)
-      setInstallHelp(false)
-    }
     window.addEventListener('paste', paste)
     window.addEventListener('online', online)
     window.addEventListener('offline', online)
-    window.addEventListener('beforeinstallprompt', prompt)
-    window.addEventListener('appinstalled', onInstalled)
     return () => {
       window.removeEventListener('paste', paste)
       window.removeEventListener('online', online)
       window.removeEventListener('offline', online)
-      window.removeEventListener('beforeinstallprompt', prompt)
-      window.removeEventListener('appinstalled', onInstalled)
       cleanup()
     }
   }, [receiveFile, cleanup])
 
   useEffect(() => {
-    if (stage === 'result' || stage === 'preview')
+    if (stage === 'result' || stage === 'error')
       resultHeading.current?.focus({ preventScroll: true })
   }, [stage])
 
   const reset = () => {
     cleanup()
     setPhoto(null)
+    setVerdict(null)
     setStage('empty')
     setError('')
     input.current && (input.current.value = '')
     camera.current && (camera.current.value = '')
   }
-  const sample = (item: Photo) => {
+
+  const sample = async (item: Photo) => {
     cleanup()
-    setError('')
-    setPhoto(item)
-    setStage('loading')
-    timer.current = setTimeout(() => setStage('result'), 1200)
+    try {
+      const blob = await (await fetch(item.url)).blob()
+      void analyze(blob, item)
+    } catch {
+      setPhoto(item)
+      setStage('error')
+      setError('Couldn’t load that sample image.')
+    }
   }
+
   const pasteImage = async () => {
     setError('')
     setClipboardBusy(true)
@@ -190,99 +215,13 @@ export default function App() {
       setClipboardBusy(false)
     }
   }
-  const install = async () => {
-    if (!installPrompt) {
-      setInstallHelp((value) => !value)
-      return
-    }
-    try {
-      await installPrompt.prompt()
-      await installPrompt.userChoice
-      setInstallPrompt(null)
-    } catch {
-      setInstallPrompt(null)
-      setInstallHelp(true)
-    }
-  }
 
   return (
     <div className="app-shell">
-      <header className="site-header">
-        <a href="/" className="site-wordmark" aria-label="SeeFood home">
-          SEEFOOD
-        </a>
-        <nav aria-label="App information">
-          <button
-            onClick={() => {
-              setHelp((value) => !value)
-              setInstallHelp(false)
-            }}
-            aria-expanded={help}
-            aria-controls="how-it-works"
-          >
-            How it works
-          </button>
-          <button
-            onClick={() => {
-              void install()
-              setHelp(false)
-            }}
-            disabled={installed}
-            aria-expanded={installHelp}
-          >
-            <Download size={15} />
-            {installed ? 'Installed' : 'Get the app'}
-          </button>
-        </nav>
-      </header>
       {offline && (
         <div className="offline-banner" role="status">
-          You’re offline. Photos and the sample demo still work on this device.
+          You’re offline. Recognition needs the local backend running.
         </div>
-      )}
-      {help && (
-        <section
-          className="info-panel"
-          id="how-it-works"
-          aria-label="How it works"
-        >
-          <div>
-            <strong>The Shazam for food.</strong>
-            <p>
-              Paste an image, drop a file, or use your camera. Your photo stays
-              in your browser. Try the sample photos to see the hotdog and
-              not-hotdog demo results. Recognition for your own photos isn’t
-              connected yet.
-            </p>
-          </div>
-          <button
-            className="icon-button"
-            aria-label="Close how it works"
-            onClick={() => setHelp(false)}
-          >
-            <X size={20} />
-          </button>
-        </section>
-      )}
-      {installHelp && (
-        <section className="info-panel" aria-label="Install SeeFood">
-          <div>
-            <strong>Take SeeFood with you.</strong>
-            <p>
-              On iPhone, open this page in Safari, tap Share, then “Add to Home
-              Screen.” On Android, use your browser’s menu and choose “Install
-              app” or “Add to Home screen.” On desktop, look for the install
-              icon in your browser’s address bar.
-            </p>
-          </div>
-          <button
-            className="icon-button"
-            aria-label="Close install instructions"
-            onClick={() => setInstallHelp(false)}
-          >
-            <X size={20} />
-          </button>
-        </section>
       )}
       <main>
         <section className="workspace" aria-label="Food image scanner">
@@ -390,40 +329,42 @@ export default function App() {
                       </div>
                       <h2>Evaluating...</h2>
                     </div>
-                  ) : stage === 'result' ? (
+                  ) : stage === 'result' && verdict ? (
                     <div
-                      className={`result-banner ${photo.kind === 'hotdog' ? 'hotdog' : 'not-hotdog'}`}
+                      className={`result-banner ${verdict.isFood ? 'food' : 'not-food'}`}
                     >
-                      <h2 ref={resultHeading} tabIndex={-1}>
-                        {photo.kind === 'hotdog' ? 'Hotdog' : 'Not hotdog'}
+                      <h2
+                        ref={resultHeading}
+                        tabIndex={-1}
+                        className={verdict.name.length > 10 ? 'long' : ''}
+                      >
+                        {verdict.name}
                       </h2>
                       <span className="verdict-icon">
-                        {photo.kind === 'hotdog' ? (
+                        {verdict.isFood ? (
                           <Check size={86} strokeWidth={3} />
                         ) : (
                           <X size={78} strokeWidth={3} />
                         )}
                       </span>
                     </div>
-                  ) : (
+                  ) : stage === 'error' ? (
                     <div className="preview-message">
                       <h2 ref={resultHeading} tabIndex={-1}>
-                        Nice shot.
+                        Hmm.
                       </h2>
                       <p>
-                        Your photo is ready. Food recognition isn’t connected
-                        yet. Try a sample below to see the demo in action.
+                        The recognition service didn’t answer. Make sure the
+                        backend is running, then try again.
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
-                <span className="demo-label">
-                  {photo.kind
-                    ? stage === 'result'
-                      ? 'SAMPLE DEMO RESULT'
-                      : 'SAMPLE DEMO'
-                    : 'PHOTO PREVIEW'}
-                </span>
+                {verdict && stage === 'result' && (
+                  <span className="demo-label">
+                    {verdict.metadata.model} · {verdict.metadata.device}
+                  </span>
+                )}
                 <button
                   className="remove-photo icon-button"
                   aria-label="Remove photo"
@@ -485,42 +426,103 @@ export default function App() {
           {photo && stage !== 'loading' && (
             <button className="reset-button" onClick={reset}>
               <RotateCcw size={15} />
-              {stage === 'preview'
-                ? 'Choose another photo'
-                : 'Try another photo'}
+              Try another photo
             </button>
           )}
         </section>
-        <section className="samples" aria-labelledby="sample-heading">
-          <h2 id="sample-heading">Hotdog. Or not hotdog.</h2>
-          <p>Try a sample and see for yourself.</p>
-          <div className="sample-list">
-            {samples.map((item) => (
-              <button
-                key={item.url}
-                className={`sample-card ${photo?.url === item.url ? 'selected' : ''}`}
-                onClick={() => sample(item)}
-                aria-label={`Try sample: ${item.name}`}
-              >
-                <img src={item.url} alt={item.name} />
-                <span>
-                  {item.kind === 'hotdog'
-                    ? 'Hotdog'
-                    : item.url.includes('pizza')
-                      ? 'Pizza'
-                      : 'Burger'}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+        {verdict && stage === 'result' ? (
+          <aside className="readout" aria-label="Model output">
+            <header className="readout-head">
+              <span className={`readout-tag ${verdict.isFood ? '' : 'not'}`}>
+                {verdict.isFood ? 'FOOD' : 'NOT FOOD'}
+              </span>
+              <h2>{verdict.name}</h2>
+              <p>
+                Top match <strong>{verdict.topLabel}</strong> · cosine{' '}
+                {verdict.topSimilarity.toFixed(3)} · food probability{' '}
+                {(verdict.foodProbability * 100).toFixed(1)}%
+              </p>
+            </header>
+            <div className="readout-block">
+              <h3>Top label matches</h3>
+              <ul className="label-list">
+                {verdict.top.map((row) => (
+                  <li key={row.label}>
+                    <span className="label-row">
+                      <span className={row.isFood ? 'food-dot' : 'not-dot'} />
+                      <span className="label-name">{row.label}</span>
+                      <span className="label-score">
+                        {row.similarity.toFixed(3)}
+                      </span>
+                    </span>
+                    <span className="label-bar">
+                      <span
+                        style={{
+                          width: `${Math.round(row.probability * 100)}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="readout-block">
+              <h3>Model metadata</h3>
+              <dl className="meta-grid">
+                <dt>model</dt>
+                <dd>{verdict.metadata.model}</dd>
+                <dt>architecture</dt>
+                <dd>{verdict.metadata.architecture}</dd>
+                <dt>device</dt>
+                <dd>{verdict.metadata.device}</dd>
+                <dt>dtype</dt>
+                <dd>{verdict.metadata.dtype}</dd>
+                <dt>embedding dim</dt>
+                <dd>{verdict.metadata.embeddingDim}</dd>
+                <dt>embedding L2 norm</dt>
+                <dd>{verdict.metadata.embeddingNorm}</dd>
+                <dt>image tokens</dt>
+                <dd>{verdict.metadata.imageTokens}</dd>
+                <dt>candidate labels</dt>
+                <dd>{verdict.metadata.candidateLabels}</dd>
+                <dt>softmax temp</dt>
+                <dd>{verdict.metadata.softmaxTemperature}</dd>
+                <dt>inference</dt>
+                <dd>{verdict.metadata.inferenceMs} ms</dd>
+                <dt>image size</dt>
+                <dd>
+                  {verdict.metadata.imageSize.width}×
+                  {verdict.metadata.imageSize.height}
+                </dd>
+                <dt>upload size</dt>
+                <dd>{(verdict.metadata.uploadBytes / 1024).toFixed(1)} KB</dd>
+                <dt>torch</dt>
+                <dd>{verdict.metadata.torch}</dd>
+                <dt>host</dt>
+                <dd>{verdict.metadata.host}</dd>
+              </dl>
+            </div>
+          </aside>
+        ) : (
+          <section className="samples" aria-labelledby="sample-heading">
+            <p>Try a sample and see for yourself.</p>
+            <div className="sample-list">
+              {samples.map((item) => (
+                <button
+                  key={item.url}
+                  className={`sample-card ${photo?.url === item.url ? 'selected' : ''}`}
+                  onClick={() => void sample(item)}
+                  aria-label={`Try sample: ${item.name}`}
+                >
+                  <img src={item.url} alt={item.name} />
+                  <span>{item.name}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
-      <footer>
-        <p>
-          A tribute to SeeFood from <em>Silicon Valley.</em>
-        </p>
-        <span>Frontend demo · Photos stay on your device</span>
-      </footer>
+      <footer></footer>
     </div>
   )
 }
