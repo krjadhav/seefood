@@ -1,0 +1,9 @@
+torch
+torchvision
+transformers>=5.18
+sentence-transformers>=6.1.0
+fastapi
+uvicorn[standard]
+python-multipart
+pillow
+numpy
