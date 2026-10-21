@@ -7,8 +7,11 @@ const crypto = require('node:crypto');
 const base = 'https://www.indianhealthyrecipes.com';
 const dir = path.join(__dirname, '.cache/www.indianhealthyrecipes.com/html');
 const manifest = path.join(__dirname, 'data/discovery/www.indianhealthyrecipes.com.json');
-const queue = [base + '/recipes/'];
-const known = new Set(queue);
+const previous = process.argv.includes('--retry-errors') && fs.existsSync(manifest)
+  ? JSON.parse(fs.readFileSync(manifest, 'utf8')) : null;
+const known = new Set(previous ? previous.urls : [base + '/recipes/']);
+const queue = previous ? previous.urls.filter(url => !fs.existsSync(path.join(dir,
+  crypto.createHash('sha256').update(url).digest('hex') + '.html'))) : [...known];
 const errors = [];
 let active = 0, completed = 0, nextStart = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -54,8 +57,8 @@ function save() {
             const start = Math.max(Date.now(), nextStart); nextStart = start + 500;
             await sleep(Math.max(0, start - Date.now()));
             const r = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-            if (!r.ok()) throw new Error('HTTP ' + r.status());
-            html = await r.text();
+            if (r && !r.ok()) throw new Error('HTTP ' + r.status());
+            html = r ? await r.text() : await page.content();
             fs.writeFileSync(file, html);
           }
           const links = await page.locator('a[href]').evaluateAll(aa => aa.map(a => a.getAttribute('href')));

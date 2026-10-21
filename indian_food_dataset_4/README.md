@@ -86,3 +86,8 @@ After a full export, `.venv/bin/python validate.py` checks every record and URL
 outcome. `--refresh` forces re-extraction of cached results for selected sites.
 The Bong Eats adapter adds an unordered-list fallback to recipe-scrapers;
 it never substitutes promotional text for missing cooking instructions.
+
+Use `node collect_swasthi.cjs --retry-errors` to fetch only missing browser HTML
+from an existing discovery manifest. Canonical recipe URLs are used for
+cross-redirect deduplication. HTTP 429 responses trigger a shared site cooldown
+of at least 60 seconds (honoring longer `Retry-After` values) and a slower rate.

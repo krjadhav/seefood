@@ -164,6 +164,9 @@ class Site:
                 except Exception:
                     pass
             data.update(source=self.host, url=normalize(response.url), scraped_at=now())
+            canonical = scraper.canonical_url()
+            if urlsplit(canonical).netloc == self.host:
+                data['url'] = normalize(canonical)
             # Bong Eats has one recipe with unordered rather than ordered steps.
             if self.host == 'www.bongeats.com' and not data['instructions']:
                 steps = scraper.soup.select('.recipe-process ul li')
