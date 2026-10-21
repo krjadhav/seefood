@@ -76,7 +76,7 @@ class Site:
         write_json(self.cache / 'robots.json', {'url': r.url, 'retrieved_at': now(), 'text': r.text})
         if 'bongeats' in self.host:
             # The public recipe index is complete HTML, with no working XML sitemap.
-            todo, seen, found = [self.base + '/recipes'], set(), set()
+            todo, seen, found = [self.base + '/recipes', self.base + '/'], set(), set()
             while todo:
                 url = todo.pop()
                 if url in seen:
@@ -91,8 +91,10 @@ class Site:
                     path = urlsplit(link).path
                     if path.startswith('/recipe/') and path.count('/') == 2 and path != '/recipe/recipes':
                         found.add(link)
-                    if path == '/recipes' and '?' in raw and raw not in seen:
+                    if path.rstrip('/') == '/recipes' and '?' in raw and raw not in seen:
                         todo.append(raw)
+                    if (path.startswith('/tags/') or path == '/popular-recipes') and link not in seen:
+                        todo.append(link)
             return sorted(found)
         todo = robot.site_maps() or [self.base + '/sitemap.xml']
         seen, found = set(), set()
