@@ -638,6 +638,45 @@ main {
   color: var(--muted);
   text-transform: capitalize;
 }
+.ranked-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ranked-head h3 {
+  margin-bottom: 0;
+}
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e9ded8;
+  background: #2b2320;
+  border: 1px solid #ffffff1f;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.copy-button:hover {
+  background: #39302c;
+}
+.ranked-json {
+  margin-top: 4px;
+  max-height: 260px;
+  overflow: auto;
+  background: #0f0b0a;
+  border: 1px solid #ffffff14;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #cfc6c0;
+  white-space: pre;
+}
 .label-name {
   flex: 1;
   color: #e9ded8;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, Check, Info, RotateCcw, Upload, X } from 'lucide-react'
+import { Camera, Check, Copy, Info, RotateCcw, Upload, X } from 'lucide-react'
 
 type Photo = { url: string; name: string }
 type Label = {
@@ -51,6 +51,14 @@ type Described = {
   region: string
   hasPhoto: boolean
 }
+type RankedMeta = {
+  course: string
+  flavor: string
+  diet: string
+  region: string
+  state: string
+  ingredients: string
+}
 type Verdict = {
   isFood: boolean
   name: string
@@ -62,6 +70,7 @@ type Verdict = {
   prototype: Prototype | null
   dish: DishFacts | null
   described: Described[]
+  rankedDishes: Record<string, RankedMeta>
   metadata: Meta
 }
 
@@ -81,6 +90,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [offline, setOffline] = useState(!navigator.onLine)
   const [clipboardBusy, setClipboardBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const objectUrl = useRef<string | null>(null)
@@ -197,6 +207,19 @@ export default function App() {
     if (stage === 'result' || stage === 'error')
       resultHeading.current?.focus({ preventScroll: true })
   }, [stage])
+
+  const copyRanked = async () => {
+    if (!verdict) return
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(verdict.rankedDishes, null, 2),
+      )
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Couldn’t copy to clipboard. Select the JSON and copy manually.')
+    }
+  }
 
   const reset = () => {
     cleanup()
@@ -654,6 +677,27 @@ export default function App() {
                 <dd>{verdict.metadata.host}</dd>
               </dl>
             </div>
+            {Object.keys(verdict.rankedDishes).length > 0 && (
+              <div className="readout-block">
+                <div className="ranked-head">
+                  <h3>Ranked dishes (JSON)</h3>
+                  <button
+                    className="copy-button"
+                    onClick={() => void copyRanked()}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? 'Copied' : 'Copy JSON'}
+                  </button>
+                </div>
+                <p className="proto-note">
+                  Top {Object.keys(verdict.rankedDishes).length} dishes by
+                  description match, each with its metadata (no scores).
+                </p>
+                <pre className="ranked-json">
+                  {JSON.stringify(verdict.rankedDishes, null, 2)}
+                </pre>
+              </div>
+            )}
           </aside>
         ) : (
           <section className="samples" aria-labelledby="sample-heading">
