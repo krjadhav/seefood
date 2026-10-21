@@ -16,6 +16,20 @@ HTML = '''<html><script type="application/ld+json">{
 }</script></html>'''
 
 class CollectorTests(unittest.TestCase):
+    def test_incomplete_card_is_preserved_and_flagged(self):
+        html = '<link rel="canonical" href="https://example.com/canonical"><script type="application/ld+json">' + json.dumps({
+            '@context': 'https://schema.org', '@type': 'Recipe',
+            'name': 'Coffee', 'recipeIngredient': ['1 cup water']}) + '</script>'
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scrape, 'ROOT', Path(tmp)):
+            site = scrape.Site('example.com', 0)
+            response = type('Response', (), {'text': html, 'url': 'https://example.com/old'})()
+            with patch.object(site, 'get', return_value=response):
+                result = site.scrape(response.url)
+                self.assertEqual(result['status'], 'ok')
+                self.assertEqual(result['recipe']['instructions'], '')
+                self.assertEqual(result['recipe']['url'], 'https://example.com/canonical')
+                self.assertTrue(result['warnings'])
+
     def test_rate_limit_sets_shared_cooldown(self):
         limited = requests.Response()
         limited.status_code = 429
