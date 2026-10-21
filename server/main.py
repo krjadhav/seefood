@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
 import guard as guardmod
+import jev as jevmod
 from embed import get_embedder
 from labels import FOOD_ALL, NON_FOOD_LABELS
 
@@ -216,6 +217,7 @@ def health() -> dict:
         "khanaPrototypes": _state.get("khana_count", 0),
         "load_ms": _state.get("load_ms"),
         "guard": guardmod.status(),
+        "jev": jevmod.status(),
     }
 
 
@@ -411,10 +413,55 @@ async def classify(
             "ingredients": d.get("ingredients", ""),
         }
 
+    # The embedding verdict so far is the fallback. Jev (if enabled) sees the
+    # image and picks the correct dish from the retrieved shortlist — or "No
+    # food" — replacing the hand-tuned threshold routing when it succeeds.
+    embedding_name = display
+    embedding_source = source
+    jev_result = None
+    if jevmod.available():
+        candidates = list(ranked_dishes.keys())
+        if is_food_final and display not in candidates:
+            candidates = [display] + candidates  # keep the visual pick selectable
+        jt0 = time.time()
+        jev_result = jevmod.decide(raw, candidates)
+        jev_ms = round((time.time() - jt0) * 1000)
+        if jev_result is not None:
+            jev_result["latencyMs"] = jev_ms
+            jev_result["agreesWithEmbedding"] = (
+                (not jev_result["isFood"] and not is_food_final)
+                or (jev_result["choice"] == embedding_name)
+            )
+            is_food_final = jev_result["isFood"]
+            source = "jev"
+            if is_food_final:
+                display = jev_result["choice"]
+                display_key = _key(display)
+                info = catalog_by_key.get(display_key)
+                dish = (
+                    {
+                        "name": info.get("name", display),
+                        "course": info.get("course", ""),
+                        "flavor": info.get("flavor", ""),
+                        "diet": info.get("diet", ""),
+                        "region": info.get("region", ""),
+                        "state": info.get("state", ""),
+                        "ingredients": info.get("ingredients", ""),
+                    }
+                    if info
+                    else None
+                )
+            else:
+                display = "Not Food"
+                dish = None
+
     return {
         "isFood": is_food_final,
         "name": display,
         "source": source,
+        "embeddingName": embedding_name,
+        "embeddingSource": embedding_source,
+        "jev": jev_result,
         "topLabel": text_name,
         "foodProbability": round(food_prob, 4),
         "topSimilarity": round(float(sims[best]), 4),

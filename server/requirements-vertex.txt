@@ -7,3 +7,4 @@ python-multipart
 pillow
 numpy
 google-cloud-aiplatform>=1.40.0
+typesafe-sdk>=0.7.0
