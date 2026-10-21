@@ -9,6 +9,7 @@ import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
@@ -135,7 +136,9 @@ class Site:
                 return old
         result = {'url': url, 'source': self.host, 'checked_at': now()}
         try:
-            response = self.get(url)
+            html_path = self.cache / 'html' / (path.stem + '.html')
+            response = (SimpleNamespace(text=html_path.read_text(), url=url)
+                        if html_path.exists() else self.get(url))
             scraper = scrape_html(response.text, response.url, supported_only=False)
             data = {key: None for key in FIELDS}
             for key in FIELDS:

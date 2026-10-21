@@ -62,3 +62,19 @@ node discover_bongeats.cjs
 The supplement stores URLs only; recipe cards are still parsed by
 recipe-scrapers. `--export-only` makes no network requests and combines cached
 results against all saved discovery manifests, marking any unattempted URLs.
+
+Swasthi's sitemap children returned empty XML, and direct recipe requests were
+blocked during collection. Its ordinary Chrome pages worked. The optional
+browser transport follows public recipe-index and internal recipe links,
+checks robots.txt, and saves HTML locally (never committed):
+
+```sh
+node collect_swasthi.cjs
+.venv/bin/python scrape.py --sites www.indianhealthyrecipes.com --retry-errors
+.venv/bin/python scrape.py --export-only
+```
+
+The browser transport uses four tabs and at most two navigation starts per
+second. It does not solve challenges or use proxies. Cached HTML is parsed by
+the same recipe-scrapers pipeline. Browser discovery excludes query strings,
+comments, feeds, admin routes and policy/about pages.
