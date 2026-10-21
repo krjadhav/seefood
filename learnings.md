@@ -291,3 +291,71 @@ TARLA_OVERRIDE_GAP  = 0.0    # weak Tarla anchors yield to curated labels easily
 
 These are specific to this model, this (Indian-centric) data, and
 mean-centered image-vs-centroid scores. Re-measure if any of those change.
+
+---
+
+## 12. We never trained anything — "accuracy" is in small derived tables
+
+Worth stating plainly because it drives deployment: **the EmbeddingGemma 2
+weights are frozen.** We did not fine-tune, and there is no "upload the datasets
+to train" step. Everything we built is *precomputed embeddings + routing logic*
+around an off-the-shelf model.
+
+The runtime needs only these committed artifacts in `server/` (~16 MB total):
+
+| artifact | size | what |
+| --- | --- | --- |
+| `prototypes.npz` | 246 KB | 80 khana centroids (avg of ~40 photos each) — the key accuracy artifact |
+| `tarla_prototypes.npz` | 12 MB | 6464 single-image anchors (float16) |
+| `dish_catalog.json` | 90 KB | CSV dishes: text + facts |
+| `tarla_catalog.json` | 3.7 MB | Tarla dishes: text + ingredients + photo URL |
+| `label_emb_cache.npz` | 21 MB | derived, **gitignored**, rebuilt on boot |
+
+The 6.7 GB images and the 1.4 GB model are **build-time only**. Nothing
+dataset-sized is ever uploaded to deploy. The novel retrieval improvement
+(mean-centered prototypes + layered routing) is model-agnostic math on vectors.
+
+## 13. Hosted embedding (Vertex "Gemini Embedding 2") — the provider seam
+
+For a tiny invited trial (~10 users), self-hosting the 740M model on an
+always-warm box is the wrong cost shape. The hosted **Gemini Embedding 2
+(Unified Multimodal)** is the cloud sibling of local EmbeddingGemma 2 — same
+unified text+image space — and bills per request.
+
+**The hard rule (again):** every stored table lives in one model's vector space.
+You cannot embed the query image with the hosted model and compare it to
+prototypes built by the local model. Switching providers means **regenerating
+every artifact** (`prototypes.npz`, `tarla_prototypes.npz`,
+`label_emb_cache.npz`) with that provider. Don't assume even "the same" model
+transfers across self-hosted vs hosted — serving/quantization differ. Regenerate,
+then re-run the sample sweep.
+
+**How we made it switchable:** `server/embed.py` defines an `Embedder` seam with
+`LocalEmbedder` and `VertexEmbedder`; `SEEFOOD_EMBED_PROVIDER=local|vertex`
+selects one. `main.py` and both build scripts call `embed_image` /
+`embed_images` / `embed_texts` only — never the model directly. So the retrieval
+and routing code is identical across providers; only the embed function changes.
+The label-embedding cache signature now includes the provider name, so a
+provider switch forces a safe rebuild instead of silently reusing wrong vectors.
+
+**Architecture shift:** hosted means the service no longer loads the model. It
+becomes a stateless function holding ~16 MB of tables: `image → Vertex → vector
+→ our cosine + mean-center + routing → verdict`. Removes the 1.4 GB image, the
+GPU/MPS box, and cold-start-from-weight-load entirely.
+
+**Cost (280 tok/image assumption, batch build / online serve):**
+- One-time artifact rebuild: ~9.6k images + ~7k labels ≈ **$0.62**, once.
+- Per live classification: 280 tok × $0.45/1M ≈ **$0.00013** (~7,900 per $1).
+- vs self-host: a VM is a fixed monthly cost whether used or not. At spiky
+  low traffic, hosted wins on both cost and ops.
+
+**Caveats:** it's a *preview* model (shape/limits/pricing can change — keep the
+local provider as the fallback the seam already gives you); verify the real
+token-per-image (the cost driver); the pasted image now leaves the device
+(privacy copy must say so) and adds a network round-trip. Google's text-only
+`gemini-embedding-*` can NOT replace this — we need the image+text unified model.
+
+**Open validation item:** the exact preview request shape in
+`VertexEmbedder._embed_text` / `_embed_image_bytes` must be confirmed against a
+real project — those two methods are the only provider-specific code. Everything
+else is verified provider-agnostic (local path still passes the full sweep).
