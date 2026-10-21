@@ -58,7 +58,13 @@ class Site:
             with self.lock:
                 time.sleep(max(0, self.last + self.delay - time.monotonic()))
                 self.last = time.monotonic()
-            r = requests.get(url, headers={'User-Agent': UA}, timeout=(15, 60))
+            try:
+                r = requests.get(url, headers={'User-Agent': UA}, timeout=(15, 60))
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt == 2:
+                    raise
+                time.sleep(5 * (attempt + 1))
+                continue
             if r.status_code == 429 or r.status_code >= 500:
                 if attempt < 2:
                     retry = r.headers.get('Retry-After', '')
@@ -95,6 +101,9 @@ class Site:
                         todo.append(raw)
                     if (path.startswith('/tags/') or path == '/popular-recipes') and link not in seen:
                         todo.append(link)
+            supplement = ROOT / 'data/discovery/bongeats_search_index.json'
+            if supplement.exists():
+                found.update(json.loads(supplement.read_text())['urls'])
             return sorted(found)
         todo = robot.site_maps() or [self.base + '/sitemap.xml']
         seen, found = set(), set()
@@ -151,6 +160,15 @@ class Site:
 def collect(host, args):
     site = Site(host, args.delay)
     manifest = ROOT / 'data' / 'discovery' / (host + '.json')
+    if args.export_only:
+        discovery = json.loads(manifest.read_text())
+        results = []
+        for url in discovery['urls']:
+            path = site.cache / (hashlib.sha256(url.encode()).hexdigest() + '.json')
+            results.append(json.loads(path.read_text()) if path.exists() else
+                           {'url': url, 'source': host, 'status': 'not_attempted'})
+        return {'source': host, 'discovery_errors': discovery['errors'],
+                'discovered': len(discovery['urls']), 'results': results}
     if manifest.exists() and not args.rediscover:
         discovery = json.loads(manifest.read_text())
         # Reload robots on every run, including resumed runs.
@@ -188,7 +206,8 @@ def export(reports):
             if r['status'] == 'ok':
                 recipes[r['recipe']['url']] = r['recipe']
             audit.append({k: v for k, v in r.items() if k != 'recipe'})
-        summary.append({**report, 'counts': dict(counts), 'processed': len(results)})
+        summary.append({**report, 'counts': dict(counts),
+                        'processed': len(results) - counts['not_attempted']})
     rows = sorted(recipes.values(), key=lambda r: (r['source'], r['url']))
     write_json(ROOT / 'data/recipes.json', rows)
     with (ROOT / 'data/recipes.csv').open('w', newline='', encoding='utf-8') as f:
@@ -208,6 +227,7 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help='Smoke test only; 0 means all discovered pages')
     parser.add_argument('--retry-errors', action='store_true')
     parser.add_argument('--rediscover', action='store_true')
+    parser.add_argument('--export-only', action='store_true', help='Rebuild all outputs from cached results without network requests')
     parser.add_argument('--sites', nargs='+', choices=SITES, default=SITES)
     args = parser.parse_args()
     with cf.ThreadPoolExecutor(len(args.sites)) as pool:

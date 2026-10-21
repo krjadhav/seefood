@@ -43,3 +43,22 @@ a new license to their recipe content.
 this snapshot. Site blocks, missing schema, missing sitemap entries and deleted
 pages can prevent complete coverage; consult the report rather than assuming
 that every recipe on a site is represented.
+
+For a faster run with up to four request starts per second per host:
+
+```sh
+.venv/bin/python scrape.py --workers 12 --delay 0.25
+```
+
+To refresh Bong Eats' public search-index supplement (requires the parent
+repository's installed Playwright dependency and Google Chrome):
+
+```sh
+node discover_bongeats.cjs
+.venv/bin/python scrape.py --sites www.bongeats.com --rediscover
+.venv/bin/python scrape.py --export-only
+```
+
+The supplement stores URLs only; recipe cards are still parsed by
+recipe-scrapers. `--export-only` makes no network requests and combines cached
+results against all saved discovery manifests, marking any unattempted URLs.
