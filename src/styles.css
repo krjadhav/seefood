@@ -914,16 +914,28 @@ footer > span {
     opacity: 0.25;
   }
 }
-@media (min-width: 1000px) and (min-height: 900px) {
+@media (min-width: 601px) {
   main {
-    padding-top: 45px;
-  }
-  .app-screen {
-    height: 710px;
+    align-items: center;
+    min-height: calc(100dvh - 140px);
   }
   .workspace {
-    width: 362px;
+    width: auto;
+    max-width: 100%;
   }
+  .app-screen {
+    height: min(88vh, 900px);
+    width: auto;
+    aspect-ratio: 390 / 844;
+    border: 14px solid #0b0b0c;
+    border-radius: 54px;
+    box-shadow:
+      0 0 0 2px #27272b,
+      0 36px 90px #000000cc,
+      0 0 160px #00000099;
+  }
+}
+@media (min-width: 1000px) and (min-height: 900px) {
   .app-brand {
     height: 99px;
   }
