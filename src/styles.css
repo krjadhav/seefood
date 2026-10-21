@@ -126,11 +126,16 @@ p {
 }
 main {
   padding: 35px 20px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 28px;
 }
 .workspace {
   width: 350px;
   max-width: 100%;
-  margin: auto;
+  margin: 0;
 }
 .app-screen {
   height: 686px;
@@ -334,10 +339,10 @@ main {
   display: grid;
   place-items: center;
 }
-.result-banner.hotdog {
+.result-banner.food {
   top: 0;
 }
-.result-banner.not-hotdog {
+.result-banner.not-food {
   bottom: 0;
   background: #df0928;
 }
@@ -354,25 +359,32 @@ main {
   place-items: center;
   z-index: -1;
 }
-.hotdog .verdict-icon {
+.food .verdict-icon {
   top: 56px;
 }
-.not-hotdog .verdict-icon {
+.not-food .verdict-icon {
   bottom: 56px;
 }
 .verdict-icon svg {
   filter: drop-shadow(2px 0 0 #141414) drop-shadow(-2px 0 0 #141414)
     drop-shadow(0 2px 0 #141414) drop-shadow(0 -2px 0 #141414);
 }
-.hotdog .verdict-icon svg {
+.food .verdict-icon svg {
   margin-top: 12px;
 }
-.not-hotdog .verdict-icon svg {
+.not-food .verdict-icon svg {
   margin-bottom: 12px;
 }
 .result-banner h2 {
   position: relative;
   z-index: 1;
+  padding: 0 70px;
+  text-transform: capitalize;
+}
+.result-banner h2.long {
+  font-size: 23px;
+  -webkit-text-stroke-width: 4px;
+  line-height: 1.05;
 }
 .photo-state.result {
   isolation: isolate;
@@ -390,7 +402,7 @@ main {
   border-radius: 3px;
   white-space: nowrap;
 }
-.app-screen:has(.not-hotdog) .demo-label {
+.app-screen:has(.not-food) .demo-label {
   bottom: 180px;
 }
 .remove-photo {
@@ -400,7 +412,7 @@ main {
   background: #171313a8;
   border: 1px solid #ffffff59;
 }
-.app-screen:has(.hotdog) .remove-photo {
+.app-screen:has(.food) .remove-photo {
   top: 185px;
 }
 .icon-button {
@@ -457,6 +469,10 @@ main {
 .samples {
   width: 350px;
   max-width: 100%;
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin: 29px auto 0;
   text-align: center;
 }
@@ -474,6 +490,8 @@ main {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-top: 18px;
+  width: 100%;
+  max-width: 350px;
 }
 .sample-card {
   background: none;
@@ -506,6 +524,124 @@ main {
   font-size: 10px;
   color: #bdb3ae;
   margin-top: 8px;
+}
+.readout {
+  width: 380px;
+  max-width: 100%;
+  background: #1a1513;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  padding: 20px 20px 24px;
+  box-shadow: 0 25px 80px #0006;
+}
+.readout-head {
+  border-bottom: 1px solid #ffffff14;
+  padding-bottom: 16px;
+}
+.readout-tag {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: #18972d;
+  color: #fff;
+}
+.readout-tag.not {
+  background: #df0928;
+}
+.readout-head h2 {
+  font-family: 'Titan One', sans-serif;
+  font-weight: 400;
+  font-size: 30px;
+  margin: 12px 0 8px;
+  text-transform: capitalize;
+  color: #fff;
+}
+.readout-head p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.readout-head strong {
+  color: #e9ded8;
+  text-transform: capitalize;
+}
+.readout-block {
+  margin-top: 20px;
+}
+.readout-block h3 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #b7aca6;
+  margin-bottom: 12px;
+}
+.label-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.food-dot,
+.not-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #18972d;
+}
+.not-dot {
+  background: #df0928;
+}
+.label-name {
+  flex: 1;
+  color: #e9ded8;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label-score {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.label-bar {
+  display: block;
+  margin-top: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background: #ffffff12;
+  overflow: hidden;
+}
+.label-bar > span {
+  display: block;
+  height: 100%;
+  background: #ed2449;
+  border-radius: 2px;
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 14px;
+  font-size: 11.5px;
+}
+.meta-grid dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.meta-grid dd {
+  color: #e9ded8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
 }
 footer {
   text-align: center;
