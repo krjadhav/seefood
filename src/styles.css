@@ -451,7 +451,7 @@ main {
   background: inherit;
   display: grid;
   place-items: center;
-  z-index: -1;
+  z-index: 2;
 }
 .food .verdict-icon {
   top: 56px;
@@ -1002,6 +1002,9 @@ footer > span {
     display: none;
   }
   .upload-button {
+    display: none;
+  }
+  .remove-photo {
     display: none;
   }
   .samples {
