@@ -15,10 +15,11 @@ import time
 from pathlib import Path
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
+import guard as guardmod
 from embed import get_embedder
 from labels import FOOD_ALL, NON_FOOD_LABELS
 
@@ -67,10 +68,11 @@ SOFTMAX_TEMPERATURE = 0.05
 TOP_K = 8
 
 app = FastAPI(title="SeeFood recognition")
+# CORS pinned to the app's own origin(s) — blocks other websites' browsers.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=sorted(guardmod.ALLOWED_ORIGINS),
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -213,11 +215,12 @@ def health() -> dict:
         "prototypes": len(_state.get("proto_names", [])),
         "khanaPrototypes": _state.get("khana_count", 0),
         "load_ms": _state.get("load_ms"),
+        "guard": guardmod.status(),
     }
 
 
 @app.get("/api/dishes")
-def dishes() -> dict:
+def dishes(_: None = Depends(guardmod.guard_light)) -> dict:
     """All catalog dish names, for the 'evaluating' scrolling ticker."""
     names = _state.get("label_names", [])
     is_food = _state.get("label_is_food", [])
@@ -227,7 +230,9 @@ def dishes() -> dict:
 
 
 @app.post("/api/classify")
-async def classify(image: UploadFile = File(...)) -> dict:
+async def classify(
+    image: UploadFile = File(...), _: None = Depends(guardmod.guard)
+) -> dict:
     if "embedder" not in _state:
         raise HTTPException(503, "Model is still loading, try again in a moment.")
     raw = await image.read()
