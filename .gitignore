@@ -13,6 +13,7 @@ google_embeddinggemma_2/
 
 # Dish image dataset (~6.7 GB); only the derived server/prototypes.npz is tracked
 indian_food_dataset*/
+!indian_food_dataset_4/
 
 # Python backend
 __pycache__/
