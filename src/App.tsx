@@ -387,7 +387,7 @@ export default function App() {
                 <div className="app-tagline">“The Shazam for Food”</div>
                 <div className="welcome-screen">
                   <div className="food-background" aria-hidden="true">
-                    <img src="/images/salmon.jpg" alt="" />
+                    <img src="/images/hotdog.jpg" alt="" />
                     <img src="/images/pasta.jpg" alt="" />
                   </div>
                   <h2>Let’s Get Started</h2>
@@ -407,18 +407,18 @@ export default function App() {
                       </>
                     )}
                   </button>
-                  <button
-                    className="paste-prompt mobile-camera"
-                    onClick={() => camera.current?.click()}
-                    aria-label="Scan food"
-                  >
-                    <Camera size={30} />
-                    <span>
-                      Scan food
-                      <br />
-                      <small>to get started</small>
+                  <div className="mobile-scan">
+                    <button
+                      className="scan-button"
+                      onClick={() => camera.current?.click()}
+                      aria-label="Scan food"
+                    >
+                      <Camera size={40} strokeWidth={2.5} />
+                    </button>
+                    <span className="scan-caption">
+                      Scan food to get started
                     </span>
-                  </button>
+                  </div>
                   <div className="screen-bottom">
                     <span className="keyboard-hint">
                       {isMac ? '⌘' : 'Ctrl'} + V · or drop a photo here
