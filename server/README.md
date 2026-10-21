@@ -5,16 +5,32 @@ A small FastAPI service that runs **EmbeddingGemma 2** (from
 
 ## How it works
 
-1. On startup it loads the model and pre-embeds a list of food and non-food
-   labels (`labels.py`).
+1. On startup it loads the model, pre-embeds food + non-food **text labels**
+   (`labels.py`, including the 79 Indian dishes), and loads the **dish photo
+   prototypes** from `prototypes.npz` if present.
 2. `POST /api/classify` embeds the uploaded image into the same 768-d space.
-3. It cosine-ranks the labels against the image. If the top match is a food
-   label, that food name is returned; otherwise the result is `Not Food`.
-4. The response includes rich metadata (scores, timing, embedding norm, device,
-   dtype, image tokens) that the frontend shows alongside the result.
+3. The text pool (image-to-text cosine, well-calibrated) decides **food vs.
+   Not Food**. If it's food, a confident **visual prototype** match
+   (image-to-image cosine ≥ `PROTO_THRESHOLD`) refines the dish *name*;
+   otherwise the text label name is used.
+4. The response includes the prototype match, top label scores, and metadata
+   (timing, embedding norm, device, dtype, image tokens, prototype count).
 
-The model is multimodal, so the image and the text labels share one embedding
-space — no separate vision classifier is needed.
+The model is multimodal, so images and text labels share one embedding space —
+no separate vision classifier is needed.
+
+## Dish prototypes
+
+`prototypes.npz` holds one averaged "visual centroid" per dish, built from the
+`indian_food_dataset/` photos. The dataset (~6.7 GB) is not committed; the
+derived `.npz` (79 × 768 floats) is. Rebuild it after changing the dish set:
+
+```sh
+python server/build_prototypes.py --k 40
+```
+
+It samples K photos per dish, embeds them, averages and re-normalizes, and
+prints a suggested `PROTO_THRESHOLD` from a held-out split.
 
 ## Run
 
