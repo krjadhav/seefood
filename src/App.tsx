@@ -17,6 +17,8 @@ type Meta = {
   embeddingNorm: number
   imageTokens: number
   candidateLabels: number
+  dishPrototypes: number
+  protoScoring: string
   softmaxTemperature: number
   inferenceMs: number
   imageSize: { width: number; height: number }
@@ -24,13 +26,22 @@ type Meta = {
   torch: string
   host: string
 }
+type Prototype = {
+  dish: string
+  similarity: number
+  margin: number
+  used: boolean
+  top: { dish: string; similarity: number }[]
+}
 type Verdict = {
   isFood: boolean
   name: string
+  source: 'text' | 'prototype'
   topLabel: string
   foodProbability: number
   topSimilarity: number
   top: Label[]
+  prototype: Prototype | null
   metadata: Meta
 }
 
@@ -438,11 +449,54 @@ export default function App() {
               </span>
               <h2>{verdict.name}</h2>
               <p>
-                Top match <strong>{verdict.topLabel}</strong> · cosine{' '}
+                Named by{' '}
+                <strong>
+                  {verdict.source === 'prototype'
+                    ? 'dish photo prototype'
+                    : 'text label'}
+                </strong>{' '}
+                · text top <strong>{verdict.topLabel}</strong> cosine{' '}
                 {verdict.topSimilarity.toFixed(3)} · food probability{' '}
                 {(verdict.foodProbability * 100).toFixed(1)}%
               </p>
             </header>
+            {verdict.prototype && (
+              <div className="readout-block">
+                <h3>Dish photo prototypes</h3>
+                <p className="proto-note">
+                  Nearest dish <strong>{verdict.prototype.dish}</strong> ·
+                  centered score {verdict.prototype.similarity.toFixed(3)} ·
+                  margin {verdict.prototype.margin.toFixed(3)} ·{' '}
+                  <span
+                    className={
+                      verdict.prototype.used ? 'proto-used' : 'proto-unused'
+                    }
+                  >
+                    {verdict.prototype.used ? 'used for name' : 'not used'}
+                  </span>
+                </p>
+                <ul className="label-list">
+                  {verdict.prototype.top.slice(0, 5).map((row) => (
+                    <li key={row.dish}>
+                      <span className="label-row">
+                        <span className="food-dot" />
+                        <span className="label-name">{row.dish}</span>
+                        <span className="label-score">
+                          {row.similarity.toFixed(3)}
+                        </span>
+                      </span>
+                      <span className="label-bar">
+                        <span
+                          style={{
+                            width: `${Math.round(Math.max(0, row.similarity / (verdict.prototype!.top[0].similarity || 1)) * 100)}%`,
+                          }}
+                        />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="readout-block">
               <h3>Top label matches</h3>
               <ul className="label-list">
@@ -485,6 +539,10 @@ export default function App() {
                 <dd>{verdict.metadata.imageTokens}</dd>
                 <dt>candidate labels</dt>
                 <dd>{verdict.metadata.candidateLabels}</dd>
+                <dt>dish prototypes</dt>
+                <dd>{verdict.metadata.dishPrototypes}</dd>
+                <dt>proto scoring</dt>
+                <dd>{verdict.metadata.protoScoring}</dd>
                 <dt>softmax temp</dt>
                 <dd>{verdict.metadata.softmaxTemperature}</dd>
                 <dt>inference</dt>

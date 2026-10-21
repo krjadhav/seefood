@@ -571,6 +571,24 @@ main {
 .readout-block {
   margin-top: 20px;
 }
+.proto-note {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.proto-note strong {
+  color: #e9ded8;
+  text-transform: capitalize;
+}
+.proto-used {
+  color: #4bd46a;
+  font-weight: 700;
+}
+.proto-unused {
+  color: #e0a34a;
+  font-weight: 700;
+}
 .readout-block h3 {
   font-size: 11px;
   letter-spacing: 1px;
