@@ -13,6 +13,14 @@ function publicFiles(directory: string, prefix = ''): string[] {
 }
 
 export default defineConfig({
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.SEEFOOD_API ?? 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     react(),
     {
