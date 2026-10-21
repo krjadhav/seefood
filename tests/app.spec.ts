@@ -35,6 +35,7 @@ function verdict({
       dish: prototypeDish,
       similarity: 0.22,
       margin: 0.03,
+      fromKhana: true,
       used: source === 'prototype',
       top: [
         { dish: prototypeDish, similarity: 0.22 },
@@ -100,9 +101,10 @@ function verdict({
       embeddingDim: 768,
       embeddingNorm: 1.0,
       imageTokens: 280,
-      candidateLabels: 448,
-      catalogDishes: 255,
-      dishPrototypes: 80,
+      candidateLabels: 7400,
+      catalogDishes: 7100,
+      dishPrototypes: 6900,
+      khanaPrototypes: 80,
       protoScoring: 'mean-centered cosine',
       softmaxTemperature: 0.05,
       inferenceMs: 12,
@@ -193,8 +195,8 @@ test('result panel lists top matches, prototype match, and metadata', async ({
   ).toBeVisible()
   await expect(readout).toContainText('rice, lentils')
   await expect(readout).toContainText('google/embeddinggemma-2')
-  await expect(readout).toContainText('255')
-  await expect(readout).toContainText('80')
+  await expect(readout).toContainText('7100')
+  await expect(readout).toContainText('80 khana')
   await expect(readout).toContainText('768')
   await expect(readout).toContainText('12 ms')
 })
@@ -345,12 +347,10 @@ test('a backend outage surfaces a clear error', async ({ page }) => {
 })
 
 test('samples run through the classifier', async ({ page }) => {
-  await mockClassify(page, { name: 'Hotdog', topLabel: 'hotdog' })
+  await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
   await page.goto('/')
-  await page
-    .getByRole('button', { name: 'Try sample: The classic hotdog' })
-    .click()
-  await expect(page.locator('.result-banner h2')).toHaveText('Hotdog')
+  await page.getByRole('button', { name: 'Try sample: Biryani' }).click()
+  await expect(page.locator('.result-banner h2')).toHaveText('Biryani')
   await page.getByRole('button', { name: 'Try another photo' }).click()
   await expect(
     page.getByRole('heading', { name: 'Let’s Get Started' }),
