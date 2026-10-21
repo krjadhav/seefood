@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 
+from embed import get_embedder
 from labels import FOOD_ALL, NON_FOOD_LABELS
 
 HERE = Path(__file__).resolve().parent
@@ -80,18 +81,11 @@ _state: dict = {}
 
 @app.on_event("startup")
 def load_model() -> None:
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-    dtype = torch.float32 if device == "cpu" else torch.bfloat16
     t0 = time.time()
-    model = SentenceTransformer(
-        MODEL_DIR, device=device, model_kwargs={"torch_dtype": dtype}
-    )
+    # Embedding backend is swappable (local EmbeddingGemma 2 or hosted Vertex);
+    # retrieval/routing below is identical either way.
+    embedder = get_embedder(MODEL_DIR)
+    device, dtype = embedder.device, embedder.dtype
     # Visual prototypes: khana (multi-image centroids) + Tarla (single-image).
     # Mean-centering amplifies the distinctive part of each prototype; a bonus
     # keeps khana authoritative. Food-plate photos otherwise cluster in a narrow
@@ -173,27 +167,25 @@ def load_model() -> None:
     for name in NON_FOOD_LABELS:
         add(name, name, False, False, False)
 
-    # Embedding the ~7k-label pool is slow, so cache it keyed by the exact texts.
-    sig = hashlib.sha1("\x1f".join(texts).encode("utf-8")).hexdigest()
+    # Embedding the ~7k-label pool is slow, so cache it keyed by the exact texts
+    # AND the provider — vectors from a different model must not be reused.
+    sig = hashlib.sha1(
+        (embedder.name + "\x1e" + "\x1f".join(texts)).encode("utf-8")
+    ).hexdigest()
     label_emb = None
     if LABEL_CACHE_PATH.exists():
         cached = np.load(LABEL_CACHE_PATH, allow_pickle=True)
         if str(cached["sig"]) == sig:
             label_emb = cached["emb"].astype(np.float32)
     if label_emb is None:
-        label_emb = model.encode(
-            texts,
-            prompt_name="Classification",
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            batch_size=64,
-        ).astype(np.float32)
+        label_emb = embedder.embed_texts(texts).astype(np.float32)
         np.savez(LABEL_CACHE_PATH, sig=sig, emb=label_emb)
 
     _state.update(
-        model=model,
+        embedder=embedder,
+        model_name=embedder.name,
         device=device,
-        dtype=str(dtype).replace("torch.", ""),
+        dtype=dtype,
         label_names=names,
         label_keys=keys,
         label_is_food=is_food,
@@ -215,8 +207,8 @@ def load_model() -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {
-        "ready": "model" in _state,
-        "model": MODEL_NAME,
+        "ready": "embedder" in _state,
+        "model": _state.get("model_name", MODEL_NAME),
         "device": _state.get("device"),
         "labels": len(_state.get("label_names", [])),
         "catalog": _state.get("catalog_count", 0),
@@ -238,7 +230,7 @@ def dishes() -> dict:
 
 @app.post("/api/classify")
 async def classify(image: UploadFile = File(...)) -> dict:
-    if "model" not in _state:
+    if "embedder" not in _state:
         raise HTTPException(503, "Model is still loading, try again in a moment.")
     raw = await image.read()
     try:
@@ -246,11 +238,9 @@ async def classify(image: UploadFile = File(...)) -> dict:
     except Exception:
         raise HTTPException(400, "Could not decode that image.")
 
-    model: SentenceTransformer = _state["model"]
+    embedder = _state["embedder"]
     t0 = time.time()
-    img_emb = model.encode(
-        {"image": pil}, normalize_embeddings=True, convert_to_numpy=True
-    )
+    img_emb = embedder.embed_image(pil)
     infer_ms = round((time.time() - t0) * 1000)
 
     label_emb: np.ndarray = _state["label_emb"]
@@ -431,7 +421,7 @@ async def classify(image: UploadFile = File(...)) -> dict:
         "described": described,
         "rankedDishes": ranked_dishes,
         "metadata": {
-            "model": MODEL_NAME,
+            "model": _state.get("model_name", MODEL_NAME),
             "architecture": "EmbeddingGemma2Model",
             "device": _state["device"],
             "dtype": _state["dtype"],

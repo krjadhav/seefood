@@ -1,0 +1,9 @@
+# Hosted-embedding (Vertex) deployment. Swaps the ~2 GB torch/transformers
+# stack for the thin google-genai SDK — the model runs in Google's cloud, this
+# service only does cosine + routing over the precomputed tables.
+fastapi
+uvicorn[standard]
+python-multipart
+pillow
+numpy
+google-genai>=0.3.0

@@ -16,9 +16,9 @@ import random
 from pathlib import Path
 
 import numpy as np
-import torch
 from PIL import Image
-from sentence_transformers import SentenceTransformer
+
+from embed import get_embedder
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = str(ROOT / "google_embeddinggemma_2")
@@ -27,28 +27,19 @@ OUT = Path(__file__).resolve().parent / "prototypes.npz"
 HOLDOUT = 5  # images per dish reserved for threshold calibration
 
 
-def embed_images(model, paths, batch_size):
+def embed_images(embedder, paths, batch_size):
     out = []
-    kept = []
     for start in range(0, len(paths), batch_size):
         chunk = paths[start : start + batch_size]
-        imgs, good = [], []
+        imgs = []
         for p in chunk:
             try:
                 imgs.append(Image.open(p).convert("RGB"))
-                good.append(p)
             except Exception:
                 continue
         if not imgs:
             continue
-        emb = model.encode(
-            [{"image": im} for im in imgs],
-            batch_size=batch_size,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )
-        out.append(emb)
-        kept.extend(good)
+        out.append(embedder.embed_images(imgs))
     if not out:
         return np.zeros((0, 768), dtype=np.float32)
     return np.vstack(out)
@@ -61,14 +52,13 @@ def main() -> None:
     args = ap.parse_args()
     random.seed(1234)
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    model = SentenceTransformer(MODEL_DIR, device=device)
+    embedder = get_embedder(MODEL_DIR)
     dishes = [
         line.strip()
         for line in (DATASET / "labels.txt").read_text().splitlines()
         if line.strip()
     ]
-    print(f"{len(dishes)} dishes, k={args.k}, device={device}")
+    print(f"{len(dishes)} dishes, k={args.k}, provider={embedder.name}")
 
     names, centroids = [], []
     pos_sims, neg_pool = [], []  # calibration
@@ -80,7 +70,7 @@ def main() -> None:
         random.shuffle(files)
         train = files[: args.k]
         held = files[args.k : args.k + HOLDOUT]
-        emb = embed_images(model, train, args.batch)
+        emb = embed_images(embedder, train, args.batch)
         if len(emb) == 0:
             print(f"  !! {dish}: no usable images, skipping")
             continue
@@ -89,7 +79,7 @@ def main() -> None:
         names.append(dish)
         centroids.append(centroid.astype(np.float32))
         if held:
-            hv = embed_images(model, held, args.batch)
+            hv = embed_images(embedder, held, args.batch)
             if len(hv):
                 holdout_vecs[dish] = hv
         print(f"  [{i + 1}/{len(dishes)}] {dish}: {len(emb)} imgs")

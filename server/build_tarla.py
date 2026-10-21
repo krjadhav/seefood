@@ -137,9 +137,9 @@ def download(dishes: list[dict], limit: int | None) -> list[dict]:
 
 def embed(dishes: list[dict], limit: int | None) -> None:
     import numpy as np
-    import torch
     from PIL import Image
-    from sentence_transformers import SentenceTransformer
+
+    from embed import get_embedder
 
     # Skip dishes that already have a strong multi-image khana prototype.
     khana = set()
@@ -151,8 +151,7 @@ def embed(dishes: list[dict], limit: int | None) -> None:
     if limit:
         targets = targets[:limit]
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    model = SentenceTransformer(str(ROOT / "google_embeddinggemma_2"), device=device)
+    embedder = get_embedder(str(ROOT / "google_embeddinggemma_2"))
 
     names, vecs = [], []
     batch_imgs, batch_names = [], []
@@ -160,12 +159,7 @@ def embed(dishes: list[dict], limit: int | None) -> None:
     def flush() -> None:
         if not batch_imgs:
             return
-        emb = model.encode(
-            [{"image": im} for im in batch_imgs],
-            batch_size=16,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )
+        emb = embedder.embed_images(batch_imgs)
         vecs.append(emb.astype(np.float16))
         names.extend(batch_names)
         batch_imgs.clear()
