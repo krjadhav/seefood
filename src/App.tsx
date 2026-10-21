@@ -17,6 +17,7 @@ type Meta = {
   embeddingNorm: number
   imageTokens: number
   candidateLabels: number
+  catalogDishes: number
   dishPrototypes: number
   protoScoring: string
   softmaxTemperature: number
@@ -33,6 +34,23 @@ type Prototype = {
   used: boolean
   top: { dish: string; similarity: number }[]
 }
+type DishFacts = {
+  name: string
+  course: string
+  flavor: string
+  diet: string
+  region: string
+  state: string
+  ingredients: string
+}
+type Described = {
+  name: string
+  similarity: number
+  course: string
+  flavor: string
+  region: string
+  hasPhoto: boolean
+}
 type Verdict = {
   isFood: boolean
   name: string
@@ -42,6 +60,8 @@ type Verdict = {
   topSimilarity: number
   top: Label[]
   prototype: Prototype | null
+  dish: DishFacts | null
+  described: Described[]
   metadata: Meta
 }
 
@@ -460,6 +480,78 @@ export default function App() {
                 {(verdict.foodProbability * 100).toFixed(1)}%
               </p>
             </header>
+            {verdict.dish && (
+              <div className="readout-block">
+                <h3>Dish info</h3>
+                <dl className="meta-grid">
+                  {verdict.dish.course && (
+                    <>
+                      <dt>course</dt>
+                      <dd>{verdict.dish.course}</dd>
+                    </>
+                  )}
+                  {verdict.dish.flavor && (
+                    <>
+                      <dt>flavor</dt>
+                      <dd>{verdict.dish.flavor}</dd>
+                    </>
+                  )}
+                  {verdict.dish.diet && (
+                    <>
+                      <dt>diet</dt>
+                      <dd>{verdict.dish.diet}</dd>
+                    </>
+                  )}
+                  {(verdict.dish.region || verdict.dish.state) && (
+                    <>
+                      <dt>origin</dt>
+                      <dd>
+                        {[verdict.dish.state, verdict.dish.region]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </dd>
+                    </>
+                  )}
+                  {verdict.dish.ingredients && (
+                    <>
+                      <dt>ingredients</dt>
+                      <dd>{verdict.dish.ingredients}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            )}
+            {verdict.described.length > 0 && (
+              <div className="readout-block">
+                <h3>Closest described dishes</h3>
+                <p className="proto-note">
+                  Image matched to CSV dish descriptions · ● = has photo
+                  prototype
+                </p>
+                <ul className="label-list">
+                  {verdict.described.slice(0, 6).map((row) => (
+                    <li key={row.name}>
+                      <span className="label-row">
+                        <span
+                          className={row.hasPhoto ? 'photo-dot' : 'nophoto-dot'}
+                        />
+                        <span className="label-name">{row.name}</span>
+                        <span className="label-score">
+                          {row.similarity.toFixed(3)}
+                        </span>
+                      </span>
+                      {(row.flavor || row.course || row.region) && (
+                        <span className="described-meta">
+                          {[row.flavor, row.course, row.region]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {verdict.prototype && (
               <div className="readout-block">
                 <h3>Dish photo prototypes</h3>
@@ -539,6 +631,8 @@ export default function App() {
                 <dd>{verdict.metadata.imageTokens}</dd>
                 <dt>candidate labels</dt>
                 <dd>{verdict.metadata.candidateLabels}</dd>
+                <dt>catalog dishes</dt>
+                <dd>{verdict.metadata.catalogDishes}</dd>
                 <dt>dish prototypes</dt>
                 <dd>{verdict.metadata.dishPrototypes}</dd>
                 <dt>proto scoring</dt>

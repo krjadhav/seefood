@@ -619,6 +619,25 @@ main {
 .not-dot {
   background: #df0928;
 }
+.photo-dot,
+.nophoto-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #4bd46a;
+}
+.nophoto-dot {
+  background: #6b615d;
+}
+.described-meta {
+  display: block;
+  margin-top: 3px;
+  margin-left: 16px;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: capitalize;
+}
 .label-name {
   flex: 1;
   color: #e9ded8;
