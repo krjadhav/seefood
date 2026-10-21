@@ -5,15 +5,24 @@ type Overrides = {
   isFood?: boolean
   name?: string
   topLabel?: string
+  source?: 'text' | 'prototype'
+  prototypeDish?: string
 }
 
 // Deterministic stand-in for the EmbeddingGemma 2 backend so the UI can be
 // tested without loading the model. Every test that uploads an image installs
 // one of these before acting.
-function verdict({ isFood = true, name = 'Pizza', topLabel = 'pizza' }: Overrides = {}) {
+function verdict({
+  isFood = true,
+  name = 'Pizza',
+  topLabel = 'pizza',
+  source = 'prototype',
+  prototypeDish = 'biryani',
+}: Overrides = {}) {
   return {
     isFood,
     name,
+    source,
     topLabel,
     foodProbability: isFood ? 0.9 : 0.4,
     topSimilarity: 0.671,
@@ -22,6 +31,16 @@ function verdict({ isFood = true, name = 'Pizza', topLabel = 'pizza' }: Override
       { label: 'bruschetta', similarity: 0.66, probability: 0.018, isFood: true },
       { label: 'a dog', similarity: 0.59, probability: 0.01, isFood: false },
     ],
+    prototype: {
+      dish: prototypeDish,
+      similarity: 0.22,
+      margin: 0.03,
+      used: source === 'prototype',
+      top: [
+        { dish: prototypeDish, similarity: 0.22 },
+        { dish: 'pulao', similarity: 0.19 },
+      ],
+    },
     metadata: {
       model: 'google/embeddinggemma-2',
       architecture: 'EmbeddingGemma2Model',
@@ -30,7 +49,9 @@ function verdict({ isFood = true, name = 'Pizza', topLabel = 'pizza' }: Override
       embeddingDim: 768,
       embeddingNorm: 1.0,
       imageTokens: 280,
-      candidateLabels: 145,
+      candidateLabels: 224,
+      dishPrototypes: 80,
+      protoScoring: 'mean-centered cosine',
       softmaxTemperature: 0.05,
       inferenceMs: 12,
       imageSize: { width: 10, height: 10 },
@@ -99,8 +120,10 @@ test('upload shows Evaluating, posts to the classifier, then a result', async ({
   ).toBeVisible()
 })
 
-test('result panel lists top matches and model metadata', async ({ page }) => {
-  await mockClassify(page)
+test('result panel lists top matches, prototype match, and metadata', async ({
+  page,
+}) => {
+  await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
   await page.goto('/')
   await page
     .getByLabel('Upload a food image')
@@ -108,15 +131,21 @@ test('result panel lists top matches and model metadata', async ({ page }) => {
   const readout = page.locator('.readout')
   await expect(readout).toBeVisible()
   await expect(readout.getByText('FOOD', { exact: true })).toBeVisible()
-  await expect(readout.locator('.label-list li')).toHaveCount(3)
+  await expect(readout.getByText('Dish photo prototypes')).toBeVisible()
+  await expect(readout.getByText('used for name')).toBeVisible()
   await expect(readout).toContainText('google/embeddinggemma-2')
+  await expect(readout).toContainText('80')
   await expect(readout).toContainText('768')
-  await expect(readout).toContainText('280')
   await expect(readout).toContainText('12 ms')
 })
 
 test('non-food images report Not Food', async ({ page }) => {
-  await mockClassify(page, { isFood: false, name: 'Not Food', topLabel: 'a dog' })
+  await mockClassify(page, {
+    isFood: false,
+    name: 'Not Food',
+    topLabel: 'a dog',
+    source: 'text',
+  })
   await page.goto('/')
   await page
     .getByLabel('Upload a food image')
