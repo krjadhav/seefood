@@ -21,13 +21,15 @@ function ensureWidget(): boolean {
   if (!api || !SITE_KEY) return false
   if (widgetId === null) {
     const el = document.createElement('div')
-    el.style.display = 'none'
+    // Rendered but out of the way; interaction-only keeps it invisible unless a
+    // challenge is actually required (then it appears bottom-left).
+    el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9999'
     document.body.appendChild(el)
     widgetId = api.render(el, {
       sitekey: SITE_KEY,
       action: ACTION,
-      size: 'invisible',
       execution: 'execute',
+      appearance: 'interaction-only', // invisible unless a challenge is needed
       callback: (token: string) => {
         resolver?.(token)
         resolver = null
