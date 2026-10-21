@@ -7,8 +7,9 @@ name (or "Not Food"), plus a pile of metadata the frontend renders on the side.
 from __future__ import annotations
 
 import io
-import math
+import json
 import platform
+import re
 import time
 from pathlib import Path
 
@@ -19,11 +20,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 
-from labels import ALL_LABELS
+from labels import FOOD_ALL, NON_FOOD_LABELS
 
 MODEL_DIR = str(Path(__file__).resolve().parent.parent / "google_embeddinggemma_2")
 PROTO_PATH = Path(__file__).resolve().parent / "prototypes.npz"
+CATALOG_PATH = Path(__file__).resolve().parent / "dish_catalog.json"
 MODEL_NAME = "google/embeddinggemma-2"
+
+
+def _key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 # Cross-modal cosine scores sit in a narrow band, so sharpen with a low
 # temperature before softmax to make the displayed confidences readable.
 SOFTMAX_TEMPERATURE = 0.05
@@ -54,14 +60,6 @@ def load_model() -> None:
     model = SentenceTransformer(
         MODEL_DIR, device=device, model_kwargs={"torch_dtype": dtype}
     )
-    label_names = [name for name, _ in ALL_LABELS]
-    label_is_food = [is_food for _, is_food in ALL_LABELS]
-    label_emb = model.encode(
-        [f"a photo of {name}" for name in label_names],
-        prompt_name="Classification",
-        normalize_embeddings=True,
-        convert_to_numpy=True,
-    )
     # Food-plate photos cluster in a narrow high-cosine cone, so raw
     # nearest-centroid barely separates dishes. Subtracting the shared mean
     # direction (mean-centering) amplifies the distinctive part of each
@@ -76,13 +74,58 @@ def load_model() -> None:
         centered = raw - raw.mean(axis=0, keepdims=True)
         centered /= np.linalg.norm(centered, axis=1, keepdims=True) + 1e-9
         proto_cent = centered
+    proto_keys = {_key(n) for n in proto_names}
+
+    # Build the text-label pool. Catalog dishes (from indian_food.csv) bring
+    # rich descriptions and extend coverage to dishes with no photos. Each
+    # entry tracks whether a visual prototype backs it, which drives routing.
+    catalog = json.loads(CATALOG_PATH.read_text()) if CATALOG_PATH.exists() else []
+    catalog_by_key = {d["key"]: d for d in catalog}
+
+    names, keys, texts, is_food, has_proto, is_cat = [], [], [], [], [], []
+    seen: set[tuple[str, bool]] = set()
+
+    def add(name: str, text: str, food: bool, proto: bool, cat: bool) -> None:
+        k = _key(name)
+        if (k, food) in seen:
+            return
+        seen.add((k, food))
+        names.append(name)
+        keys.append(k)
+        texts.append(text)
+        is_food.append(food)
+        has_proto.append(proto)
+        is_cat.append(cat)
+
+    # Catalog first so its rich sentence wins over a plain "a photo of" label.
+    for d in catalog:
+        add(d["name"], d["text"], True, d["key"] in proto_keys, True)
+    for name in FOOD_ALL:
+        add(name, f"a photo of {name}", True, _key(name) in proto_keys, False)
+    for name in proto_names:  # ensure every prototype dish is representable
+        add(name, f"a photo of {name}", True, True, _key(name) in catalog_by_key)
+    for name in NON_FOOD_LABELS:
+        add(name, name, False, False, False)
+
+    label_emb = model.encode(
+        texts,
+        prompt_name="Classification",
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+    )
     _state.update(
         model=model,
         device=device,
         dtype=str(dtype).replace("torch.", ""),
-        label_names=label_names,
-        label_is_food=label_is_food,
+        label_names=names,
+        label_keys=keys,
+        label_is_food=is_food,
+        label_has_proto=has_proto,
+        label_is_cat=is_cat,
         label_emb=label_emb,
+        catalog_by_key=catalog_by_key,
+        catalog_count=len(catalog),
+        proto_keys=proto_keys,
         proto_names=proto_names,
         proto_cent=proto_cent,
         proto_mean=proto_mean,
@@ -97,6 +140,7 @@ def health() -> dict:
         "model": MODEL_NAME,
         "device": _state.get("device"),
         "labels": len(_state.get("label_names", [])),
+        "catalog": _state.get("catalog_count", 0),
         "prototypes": len(_state.get("proto_names", [])),
         "load_ms": _state.get("load_ms"),
     }
@@ -121,7 +165,10 @@ async def classify(image: UploadFile = File(...)) -> dict:
 
     label_emb: np.ndarray = _state["label_emb"]
     names: list[str] = _state["label_names"]
+    keys: list[str] = _state["label_keys"]
     is_food: list[bool] = _state["label_is_food"]
+    is_cat: list[bool] = _state["label_is_cat"]
+    catalog_by_key: dict = _state.get("catalog_by_key", {})
 
     sims = label_emb @ img_emb  # cosine, both normalized
     scaled = sims / SOFTMAX_TEMPERATURE
@@ -169,21 +216,58 @@ async def classify(image: UploadFile = File(...)) -> dict:
             ],
         }
 
-    # The text pool (image-to-text, well-calibrated) decides food vs. Not Food.
-    # For food, the visual prototype names the specific dish.
+    # The text pool decides food vs. Not Food. For food, the visual prototype
+    # (95% top-1 on dataset dishes) names the specific dish.
     if not text_is_food:
         is_food_final = False
         display = "Not Food"
+        display_key = ""
         source = "text"
     elif prototype is not None:
         is_food_final = True
         display = prototype["dish"]
+        display_key = _key(prototype["dish"])
         prototype["used"] = True
         source = "prototype"
     else:
         is_food_final = True
         display = text_name
+        display_key = keys[best]
         source = "text"
+
+    # Facts for the named dish, pulled from the CSV catalog when available.
+    info = catalog_by_key.get(display_key)
+    dish = None
+    if is_food_final and info:
+        dish = {
+            "name": info["name"],
+            "course": info["course"],
+            "flavor": info["flavor"],
+            "diet": info["diet"],
+            "region": info["region"],
+            "state": info["state"],
+            "ingredients": info["ingredients"],
+        }
+
+    # Closest described dishes (image-to-description text match over the CSV
+    # catalog). Surfaces the long tail — including dishes with no photo
+    # prototype — with their full descriptions, independent of the verdict.
+    proto_keys: set = _state.get("proto_keys", set())
+    described = []
+    if is_food_final:
+        cat_order = [i for i in order if is_food[i] and is_cat[i]]
+        for i in cat_order[:TOP_K]:
+            d = catalog_by_key.get(keys[i], {})
+            described.append(
+                {
+                    "name": names[i],
+                    "similarity": round(float(sims[i]), 4),
+                    "course": d.get("course", ""),
+                    "flavor": d.get("flavor", ""),
+                    "region": d.get("region", ""),
+                    "hasPhoto": keys[i] in proto_keys,
+                }
+            )
 
     return {
         "isFood": is_food_final,
@@ -194,6 +278,8 @@ async def classify(image: UploadFile = File(...)) -> dict:
         "topSimilarity": round(float(sims[best]), 4),
         "top": top,
         "prototype": prototype,
+        "dish": dish,
+        "described": described,
         "metadata": {
             "model": MODEL_NAME,
             "architecture": "EmbeddingGemma2Model",
@@ -203,6 +289,7 @@ async def classify(image: UploadFile = File(...)) -> dict:
             "embeddingNorm": round(float(np.linalg.norm(img_emb)), 4),
             "imageTokens": 280,
             "candidateLabels": len(names),
+            "catalogDishes": _state.get("catalog_count", 0),
             "dishPrototypes": len(proto_names),
             "protoScoring": "mean-centered cosine",
             "softmaxTemperature": SOFTMAX_TEMPERATURE,

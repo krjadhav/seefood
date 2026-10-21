@@ -19,6 +19,24 @@ A small FastAPI service that runs **EmbeddingGemma 2** (from
 The model is multimodal, so images and text labels share one embedding space —
 no separate vision classifier is needed.
 
+## Dish catalog (CSV)
+
+`dish_catalog.json` is built from `indian_food_dataset_2/indian_food.csv` and
+adds ~255 dishes — many with no photos — as rich text labels
+(`"Balu shahi: a sweet vegetarian dessert from East India made with…"`). It is
+used two ways, without changing the prototype verdict:
+
+- **Dish info:** facts (course, flavor, diet, region, ingredients) for the
+  named dish.
+- **Closest described dishes:** the image ranked against the CSV descriptions,
+  surfacing the long tail (incl. dishes with no prototype).
+
+Rebuild after editing the CSV:
+
+```sh
+python server/build_catalog.py
+```
+
 ## Dish prototypes
 
 `prototypes.npz` holds one averaged "visual centroid" per dish, built from the
