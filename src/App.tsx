@@ -76,10 +76,6 @@ type Verdict = {
   metadata: Meta
 }
 
-// Minimum time to hold the retrieved-dishes animation. Placeholder until the
-// Jev step runs; it will instead hold until Jev's response returns.
-const RETRIEVED_HOLD_MS = 3000
-
 // Backend base URL. Empty in dev (Vite proxies /api); set VITE_API_BASE_URL at
 // build time for the deployed PWA to reach a public backend. No trailing slash.
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -105,7 +101,6 @@ export default function App() {
   const [clipboardBusy, setClipboardBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [dishes, setDishes] = useState<string[]>([])
-  const [scanCount, setScanCount] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const objectUrl = useRef<string | null>(null)
@@ -137,11 +132,6 @@ export default function App() {
       const data: Verdict = await response.json()
       if (currentOperation !== operation.current) return
       setVerdict(data)
-      // Show the retrieved dishes scrolling while the (future) Jev call runs.
-      // For now just hold briefly before revealing the result.
-      setStage('retrieved')
-      await new Promise((resolve) => setTimeout(resolve, RETRIEVED_HOLD_MS))
-      if (currentOperation !== operation.current) return
       setStage('result')
     } catch {
       if (currentOperation !== operation.current) return
@@ -228,25 +218,6 @@ export default function App() {
       resultHeading.current?.focus({ preventScroll: true })
   }, [stage])
 
-  // Rapid count-up over the retrieved dishes, to make parsing feel instant.
-  useEffect(() => {
-    if (stage !== 'retrieved' || !verdict) {
-      setScanCount(0)
-      return
-    }
-    const total = Object.keys(verdict.rankedDishes).length
-    const start = performance.now()
-    const duration = 600
-    let raf = 0
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration)
-      setScanCount(Math.round(p * total))
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [stage, verdict])
-
   useEffect(() => {
     let active = true
     fetch(`${API_BASE}/api/dishes`)
@@ -283,11 +254,6 @@ export default function App() {
       return [...rot, ...rot]
     })
   }, [stage, verdict, dishes])
-
-  const scanTotal =
-    stage === 'retrieved' && verdict
-      ? Object.keys(verdict.rankedDishes).length
-      : 0
 
   const copyRanked = async () => {
     if (!verdict) return
@@ -479,12 +445,6 @@ export default function App() {
                         ))}
                       </div>
                       <h2>Evaluating...</h2>
-                      {scanTotal > 0 && (
-                        <div className="scan-count">
-                          {scanCount.toLocaleString()} / {scanTotal} dishes
-                          scanned
-                        </div>
-                      )}
                     </div>
                   ) : stage === 'result' && verdict ? (
                     <div
@@ -517,11 +477,6 @@ export default function App() {
                     </div>
                   ) : null}
                 </div>
-                {verdict && stage === 'result' && (
-                  <span className="demo-label">
-                    {verdict.metadata.model} · {verdict.metadata.device}
-                  </span>
-                )}
                 <button
                   className="remove-photo icon-button"
                   aria-label="Remove photo"
@@ -741,51 +696,6 @@ export default function App() {
                   </li>
                 ))}
               </ul>
-            </div>
-            <div className="readout-block">
-              <h3>Model metadata</h3>
-              <dl className="meta-grid">
-                <dt>model</dt>
-                <dd>{verdict.metadata.model}</dd>
-                <dt>architecture</dt>
-                <dd>{verdict.metadata.architecture}</dd>
-                <dt>device</dt>
-                <dd>{verdict.metadata.device}</dd>
-                <dt>dtype</dt>
-                <dd>{verdict.metadata.dtype}</dd>
-                <dt>embedding dim</dt>
-                <dd>{verdict.metadata.embeddingDim}</dd>
-                <dt>embedding L2 norm</dt>
-                <dd>{verdict.metadata.embeddingNorm}</dd>
-                <dt>image tokens</dt>
-                <dd>{verdict.metadata.imageTokens}</dd>
-                <dt>candidate labels</dt>
-                <dd>{verdict.metadata.candidateLabels}</dd>
-                <dt>catalog dishes</dt>
-                <dd>{verdict.metadata.catalogDishes}</dd>
-                <dt>dish prototypes</dt>
-                <dd>
-                  {verdict.metadata.dishPrototypes} (
-                  {verdict.metadata.khanaPrototypes} khana)
-                </dd>
-                <dt>proto scoring</dt>
-                <dd>{verdict.metadata.protoScoring}</dd>
-                <dt>softmax temp</dt>
-                <dd>{verdict.metadata.softmaxTemperature}</dd>
-                <dt>inference</dt>
-                <dd>{verdict.metadata.inferenceMs} ms</dd>
-                <dt>image size</dt>
-                <dd>
-                  {verdict.metadata.imageSize.width}×
-                  {verdict.metadata.imageSize.height}
-                </dd>
-                <dt>upload size</dt>
-                <dd>{(verdict.metadata.uploadBytes / 1024).toFixed(1)} KB</dd>
-                <dt>backend</dt>
-                <dd>{verdict.metadata.backend}</dd>
-                <dt>host</dt>
-                <dd>{verdict.metadata.host}</dd>
-              </dl>
             </div>
             {Object.keys(verdict.rankedDishes).length > 0 && (
               <div className="readout-block">

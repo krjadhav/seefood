@@ -174,7 +174,7 @@ test('upload shows Evaluating, posts to the classifier, then a result', async ({
   ).toBeVisible()
 })
 
-test('result panel lists top matches, prototype match, and metadata', async ({
+test('result panel lists top matches and prototype match', async ({
   page,
 }) => {
   await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
@@ -194,11 +194,6 @@ test('result panel lists top matches, prototype match, and metadata', async ({
     readout.getByRole('button', { name: 'Copy JSON' }),
   ).toBeVisible()
   await expect(readout).toContainText('rice, lentils')
-  await expect(readout).toContainText('google/embeddinggemma-2')
-  await expect(readout).toContainText('7100')
-  await expect(readout).toContainText('80 khana')
-  await expect(readout).toContainText('768')
-  await expect(readout).toContainText('12 ms')
 })
 
 test('copy JSON writes the ranked dishes to the clipboard', async ({ page }) => {
