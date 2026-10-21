@@ -355,7 +355,198 @@ token-per-image (the cost driver); the pasted image now leaves the device
 (privacy copy must say so) and adds a network round-trip. Google's text-only
 `gemini-embedding-*` can NOT replace this — we need the image+text unified model.
 
-**Open validation item:** the exact preview request shape in
-`VertexEmbedder._embed_text` / `_embed_image_bytes` must be confirmed against a
-real project — those two methods are the only provider-specific code. Everything
-else is verified provider-agnostic (local path still passes the full sweep).
+**Open validation item (RESOLVED — see §14):** the preview request shape was
+confirmed against a real project. The outcome was not what the pricing page
+implied: the "Gemini Embedding 2 (Unified Multimodal)" id 404'd in-project; the
+model that actually serves is `multimodalembedding@001` at **1408 dims**, via a
+different SDK. Details, API shape, and the knock-on artifact rebuild are in §14.
+
+---
+
+## 14. Vertex multimodal embedding — what the preview actually was
+
+The §13 seam was built blind against the pricing-page name. Validating it in a
+real GCP project corrected several assumptions:
+
+- **The model id was wrong.** `gemini-embedding-2` / "Gemini Embedding 2
+  (Unified Multimodal)" returned 404 in-project. The unified image+text model
+  that is actually callable is **`multimodalembedding@001`**. Lesson: a model on
+  the pricing/marketing page is not proof it's enabled for your project — probe
+  `publishers/google/models/*` before coding to a name.
+- **The SDK was wrong.** `google-genai` (`genai.Client(vertexai=True)
+  .models.embed_content`) is the Gemini-API surface; `multimodalembedding@001`
+  is a classic Vertex *prediction* model. Call it with
+  `google-cloud-aiplatform` → `aiplatform_v1.PredictionServiceClient.predict`
+  against `projects/{p}/locations/{l}/publishers/google/models/
+  multimodalembedding@001`. Instances are `{"image": {"bytesBase64Encoded": …}}`
+  or `{"text": …}`; params `{"dimension": D}`; response fields `imageEmbedding`
+  / `textEmbedding`. Requirements change: drop `google-genai`, add
+  `google-cloud-aiplatform>=1.40.0`.
+- **The dimension was wrong (1408, not 768).** Default output is **1408-d**
+  (configurable 512/256/128), unrelated to local EmbeddingGemma 2's 768-d space.
+  So the §13 "regenerate every artifact" rule bit twice over: different provider
+  *and* different dimensionality. `prototypes.npz` was rebuilt at `(80, 1408)`.
+  A vector-length mismatch is the cheap tripwire that catches a stale artifact.
+- **No batch endpoint; quota is low.** Online prediction takes one instance per
+  request, so bulk artifact builds must fan out — a `ThreadPoolExecutor`
+  (`SEEFOOD_VERTEX_WORKERS`, default 8) over per-image calls. The online quota is
+  small, so wrap `predict` in exponential backoff on `ResourceExhausted` (429) /
+  `ServiceUnavailable` (503). Without the backoff a bulk build dies partway.
+- **Model name is now self-describing at runtime.** `self.name =
+  f"{model} d{dim} (vertex)"` surfaces the provider+dim in the health/metadata
+  payload, so "which space are these artifacts in?" is answerable without
+  reading code.
+
+The provider seam itself held up: only `embed.py` changed; `main.py` and the
+build scripts were untouched. The abstraction paid off exactly where §13
+predicted it would.
+
+---
+
+## 15. Stripping the demo instrumentation — and the test coupling it exposed
+
+The build accreted dev/demo scaffolding (the "feel fast" animation from §10, a
+model-metadata readout, the ranked-JSON panel). Taking the app toward a clean
+end-user surface meant removing most of it, which taught a testing lesson.
+
+- **The artificial latency mask became latency, not a mask.** The 3 s
+  `RETRIEVED_HOLD_MS` hold (and its "N / 254 dishes scanned" count-up) existed to
+  cover a *future* Jev step that isn't wired yet. With nothing behind it, it was
+  pure dead wait — reveal the verdict as soon as `/api/classify` returns. Don't
+  ship a latency mask for latency that doesn't exist yet; add it back with the
+  step it's masking.
+- **E2E tests must assert the user contract, not dev instrumentation.** Several
+  Playwright tests asserted deep into the debug readout — exact model id
+  (`google/embeddinggemma-2`), `80 khana`, `12 ms`, the `Copy JSON` button,
+  `.readout-tag`. Hiding those panels broke ~6 assertions across multiple tests
+  and forced edits in lockstep with a cosmetic change. Assertions belong on the
+  durable surface (`.result-banner h2`, the samples row, the Evaluating
+  heading); let internal/dev panels stay untested so UI cleanup stays cheap.
+- **Removing a rendered branch resolved an earlier "learning."** §9's
+  strict-mode double-match (dish name in *both* banner and readout) is now moot —
+  the readout is gone, so the name renders once. A workaround that only existed
+  to cope with dev UI disappeared with the dev UI.
+- **Dead helpers fall out with the branch.** Deleting the readout orphaned
+  `copyRanked`, the `copied` state, and the `Copy` import. The build is
+  `tsc -b` with no `noUnusedLocals`, so unused code would *not* fail the
+  build or deploy — worth removing by hand for hygiene, but don't count on the
+  compiler to flag it here.
+
+---
+
+## 16. Background imagery ≠ sample buttons (a small UI taxonomy)
+
+The welcome screen has two unrelated image sets that are easy to conflate when a
+request says "change the first image":
+
+- the **welcome-screen background** (`.food-background`, two full-bleed photos
+  behind the hero copy — e.g. salmon over pasta), and
+- the **sample buttons** (`samples[]`, the tappable "Try a sample" row that runs
+  a real classification).
+
+A request to swap "the first image" was initially mis-applied to the background
+when it meant the first *sample*. Lesson: these live in different code (`<img>`
+in the hero vs the `samples` array) and serve different roles — confirm which
+set before editing. The sample buttons are functional (they call the
+classifier); the background is pure decoration.
+
+### Make the primary action look like a button
+
+The mobile entry point was a text prompt ("Scan food to get started") plus a
+secondary "Upload image" button — the real action (open camera) read as a label,
+not a control. Replacing it with a single prominent circular camera button (red
+fill, white border, large tap target) and a caption below made the primary
+action obviously tappable. Keep the hidden `capture="environment"` file input
+and the `aria-label` intact so the native camera still fires and the existing
+`getByRole('button', { name: 'Scan food' })` test keeps passing — restyle the
+affordance without renaming its accessible contract.
+
+---
+
+## 17. Deploying it — Pages custom domain + thin Cloud Run on Vertex
+
+Shipping the hosted-embedding build (PWA on GitHub Pages, API on Cloud Run
+calling Vertex) surfaced a pile of deploy-specific gotchas, most of them the kind
+you only hit once.
+
+### Frontend / GitHub Pages
+
+- **Relative `/api` silently breaks on a static host.** In dev the Vite proxy
+  makes `fetch('/api/classify')` work; on Pages it resolves to
+  `https://<domain>/api/...` which 404s. The deployed PWA must call an
+  **absolute** backend URL. Added `API_BASE` from a build-time
+  `VITE_API_BASE_URL` (empty in dev so the proxy still applies), injected via the
+  Pages workflow's `env:`. The API URL is config, not a secret.
+- **The `CNAME` file alone did not register the custom domain.** Deploying via
+  the Actions artifact with a `public/CNAME` left the Pages `cname` field `None`.
+  Had to set it with `gh api -X PUT repos/<r>/pages -f cname=<domain>`. Keep both
+  (the file *and* the API setting).
+- **Can't enforce HTTPS before the cert exists.** `-F https_enforced=true`
+  returns `404 "The certificate does not exist yet"`. Sequence is: set `cname`
+  → GitHub provisions the TLS cert async (`authorization_pending` →
+  `approved`, minutes) → *then* `https_enforced=true`. The site serves over
+  HTTP the whole time, so don't block on it.
+- **Mixed content runs the right way here.** HTTP page → HTTPS Cloud Run API is
+  allowed; only HTTPS→HTTP is blocked. So testing worked even before the Pages
+  cert landed.
+
+### Backend / Cloud Run + Vertex
+
+- **Billing must be enabled before *any* Vertex call.** Every embed 403'd with
+  `"This API method requires billing to be enabled"` until the project was linked
+  to an open billing account (`gcloud billing projects link`). "API enabled" ≠
+  "billing enabled" — both are required, and the error names the wrong-looking
+  cause (permission) for a billing problem.
+- **The thin image can't import the model stack.** The Vertex service runs on
+  `requirements-vertex.txt` (no torch/transformers). `main.py` still had
+  top-level `import torch` / `from sentence_transformers import …` left over from
+  the local path — they crash the thin container at import. Move all heavy
+  imports *inside* the provider classes (`LocalEmbedder.__init__`) so the thin
+  build never touches them; the only top-level casualty was a `torch.__version__`
+  metadata field, swapped for a provider-agnostic `backend` string.
+- **Bake the label cache; don't rebuild it on cold start.** Boot rebuilds
+  `label_emb_cache.npz` by embedding every label — on Vertex that's thousands of
+  API calls *per cold start*, which trips the low online quota (§14) and makes
+  cold starts minutes long and flaky. Precompute the cache, ship it in the image,
+  and the container boots in ~4.4 s doing zero Vertex calls (only the per-request
+  image embed hits the API). Cold start with no model weights is seconds, not the
+  minutes a self-hosted model would cost.
+- **`.gcloudignore` overrides `.gitignore` for the upload — use it to *include*
+  a gitignored artifact.** `gcloud run deploy --source` falls back to
+  `.gitignore`, which excludes the (intentionally untracked) label cache. Without
+  a `.gcloudignore` the cache never reaches the build context and the bake above
+  silently doesn't happen. Add a `.gcloudignore` that drops the heavy dirs but
+  keeps `server/label_emb_cache.npz`. (Separately, `.dockerignore` controls what
+  `COPY` sees — both must agree.)
+- **Partial deploys via ignore files.** To ship the validated khana-only bundle
+  while the full Tarla parity was still embedding in the background, the
+  `.dockerignore`/`.gcloudignore` simply exclude `tarla_*`. The container then
+  loads 80 prototypes + the CSV catalog; its label set matches the baked cache's
+  signature, so no rebuild. Re-including Tarla is an ignore-file edit + redeploy.
+- **Runtime auth needs no key.** Grant the Cloud Run **runtime service account**
+  (`<projectNumber>-compute@…`) `roles/aiplatform.user`; the
+  `google-cloud-aiplatform` client picks up ADC from the metadata server. No
+  service-account JSON to mount or leak.
+- **`--source` deploy is one command, no local Docker.** `gcloud run deploy
+  seefood-api --source .` runs Cloud Build (upload → build → push → deploy),
+  auto-creates the Artifact Registry repo, and prints the service URL. Fine for a
+  solo deploy; the CI path would push to Artifact Registry explicitly.
+
+### Security posture (flagged, not yet fixed)
+
+The service is `--allow-unauthenticated` with CORS `*` — anyone with the URL can
+call it and bill the project's Vertex. Acceptable for a short invited test with
+`max-instances` capping blast radius, but **token auth + CORS pinned to the
+domain are the gate before wider sharing** (the deployment plan's Phase 3). Don't
+post the Cloud Run URL publicly.
+
+### Artifact hygiene across a provider migration
+
+Juggling local-space vs Vertex-space artifacts (backing up the local `.npz` to a
+`_local_space/` dir, overwriting `prototypes.npz` in place, a second person
+committing in parallel) made it genuinely hard to answer "which space is the
+committed artifact in?" The durable guards: the **vector-length tripwire**
+(768 vs 1408 fails loudly) and the **provider-tagged cache signature** (§13–14).
+The softer lesson — name migrated artifacts by space (`prototypes.vertex1408.npz`)
+and let the running deploy read from the build context, not from whatever git
+state happens to be checked out.
