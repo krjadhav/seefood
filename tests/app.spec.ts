@@ -52,6 +52,26 @@ function verdict({
           ingredients: 'rice, lentils',
         }
       : null,
+    rankedDishes: isFood
+      ? {
+          Dosa: {
+            course: 'snack',
+            flavor: 'spicy',
+            diet: 'vegetarian',
+            region: 'South',
+            state: '',
+            ingredients: 'rice, lentils',
+          },
+          [name]: {
+            course: 'snack',
+            flavor: 'spicy',
+            diet: 'vegetarian',
+            region: 'South',
+            state: '',
+            ingredients: 'rice, lentils',
+          },
+        }
+      : {},
     described: isFood
       ? [
           {
@@ -167,12 +187,41 @@ test('result panel lists top matches, prototype match, and metadata', async ({
   await expect(readout.getByText('used for name')).toBeVisible()
   await expect(readout.getByText('Dish info')).toBeVisible()
   await expect(readout.getByText('Closest described dishes')).toBeVisible()
+  await expect(readout.getByText('Ranked dishes (JSON)')).toBeVisible()
+  await expect(
+    readout.getByRole('button', { name: 'Copy JSON' }),
+  ).toBeVisible()
   await expect(readout).toContainText('rice, lentils')
   await expect(readout).toContainText('google/embeddinggemma-2')
   await expect(readout).toContainText('255')
   await expect(readout).toContainText('80')
   await expect(readout).toContainText('768')
   await expect(readout).toContainText('12 ms')
+})
+
+test('copy JSON writes the ranked dishes to the clipboard', async ({ page }) => {
+  // Stub writeText to avoid contending on the real system clipboard (the
+  // Chrome channel uses it), which flakes under parallel tests.
+  await page.addInitScript(() => {
+    ;(window as unknown as { __copied?: string }).__copied = ''
+    navigator.clipboard.writeText = async (text: string) => {
+      ;(window as unknown as { __copied?: string }).__copied = text
+    }
+  })
+  await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
+  await page.goto('/')
+  await page
+    .getByLabel('Upload a food image')
+    .setInputFiles('public/images/pizza.jpg')
+  await page.getByRole('button', { name: 'Copy JSON' }).click()
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible()
+  const text = await page.evaluate(
+    () => (window as unknown as { __copied?: string }).__copied || '',
+  )
+  const parsed = JSON.parse(text)
+  expect(Object.keys(parsed)).toContain('Biryani')
+  expect(parsed.Biryani).toHaveProperty('ingredients')
+  expect(JSON.stringify(parsed)).not.toContain('similarity')
 })
 
 test('non-food images report Not Food', async ({ page }) => {
