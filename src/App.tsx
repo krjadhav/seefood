@@ -61,10 +61,20 @@ type RankedMeta = {
   state: string
   ingredients: string
 }
+type Jev = {
+  choice: string
+  confidence: number
+  isFood: boolean
+  probabilities: Record<string, number>
+  latencyMs: number
+  agreesWithEmbedding: boolean
+}
 type Verdict = {
   isFood: boolean
   name: string
-  source: 'text' | 'prototype'
+  source: 'text' | 'prototype' | 'jev'
+  embeddingName?: string
+  jev?: Jev | null
   topLabel: string
   foodProbability: number
   topSimilarity: number
