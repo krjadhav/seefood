@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Check, Copy, Info, RotateCcw, Upload, X } from 'lucide-react'
 
 type Photo = { url: string; name: string }
@@ -19,6 +19,7 @@ type Meta = {
   candidateLabels: number
   catalogDishes: number
   dishPrototypes: number
+  khanaPrototypes: number
   protoScoring: string
   softmaxTemperature: number
   inferenceMs: number
@@ -31,6 +32,7 @@ type Prototype = {
   dish: string
   similarity: number
   margin: number
+  fromKhana: boolean
   used: boolean
   top: { dish: string; similarity: number }[]
 }
@@ -74,23 +76,32 @@ type Verdict = {
   metadata: Meta
 }
 
+// Minimum time to hold the retrieved-dishes animation. Placeholder until the
+// Jev step runs; it will instead hold until Jev's response returns.
+const RETRIEVED_HOLD_MS = 3000
+
 const samples: Photo[] = [
-  { url: '/images/hotdog.jpg', name: 'The classic hotdog' },
-  { url: '/images/pizza.jpg', name: 'A slice of possibility' },
-  { url: '/images/burger.jpg', name: 'A very good imposter' },
+  { url: '/images/dosa.jpg', name: 'Masala dosa' },
+  { url: '/images/biryani.jpg', name: 'Biryani' },
+  { url: '/images/samosa.jpg', name: 'Samosa' },
+  { url: '/images/gulabjamun.jpg', name: 'Gulab jamun' },
+  { url: '/images/momo.jpg', name: 'Steamed momo' },
+  { url: '/images/pizza.jpg', name: 'Pizza' },
 ]
 
 export default function App() {
   const [photo, setPhoto] = useState<Photo | null>(null)
-  const [stage, setStage] = useState<'empty' | 'loading' | 'result' | 'error'>(
-    'empty',
-  )
+  const [stage, setStage] = useState<
+    'empty' | 'loading' | 'retrieved' | 'result' | 'error'
+  >('empty')
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
   const [offline, setOffline] = useState(!navigator.onLine)
   const [clipboardBusy, setClipboardBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [dishes, setDishes] = useState<string[]>([])
+  const [scanCount, setScanCount] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const objectUrl = useRef<string | null>(null)
@@ -122,6 +133,11 @@ export default function App() {
       const data: Verdict = await response.json()
       if (currentOperation !== operation.current) return
       setVerdict(data)
+      // Show the retrieved dishes scrolling while the (future) Jev call runs.
+      // For now just hold briefly before revealing the result.
+      setStage('retrieved')
+      await new Promise((resolve) => setTimeout(resolve, RETRIEVED_HOLD_MS))
+      if (currentOperation !== operation.current) return
       setStage('result')
     } catch {
       if (currentOperation !== operation.current) return
@@ -207,6 +223,67 @@ export default function App() {
     if (stage === 'result' || stage === 'error')
       resultHeading.current?.focus({ preventScroll: true })
   }, [stage])
+
+  // Rapid count-up over the retrieved dishes, to make parsing feel instant.
+  useEffect(() => {
+    if (stage !== 'retrieved' || !verdict) {
+      setScanCount(0)
+      return
+    }
+    const total = Object.keys(verdict.rankedDishes).length
+    const start = performance.now()
+    const duration = 600
+    let raf = 0
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration)
+      setScanCount(Math.round(p * total))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [stage, verdict])
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/dishes')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && data?.names) setDishes(data.names)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Fast scrolling columns during evaluation. Once retrieval returns, show the
+  // actual ranked dishes (in order); before that, a shuffled sample. Three
+  // columns at different speeds, each doubled for a seamless loop, to convey a
+  // lot of dishes being parsed very quickly.
+  const tickerCols = useMemo(() => {
+    let base: string[]
+    if (stage === 'retrieved' && verdict) {
+      base = Object.keys(verdict.rankedDishes).slice(0, 72)
+    } else {
+      base = [...dishes]
+      for (let i = base.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[base[i], base[j]] = [base[j], base[i]]
+      }
+      base = base.slice(0, 72)
+    }
+    if (!base.length) return []
+    return [0, 1, 2].map((c) => {
+      const off = (c * 11) % base.length
+      const rot = [...base.slice(off), ...base.slice(0, off)]
+      return [...rot, ...rot]
+    })
+  }, [stage, verdict, dishes])
+
+  const scanTotal =
+    stage === 'retrieved' && verdict
+      ? Object.keys(verdict.rankedDishes).length
+      : 0
 
   const copyRanked = async () => {
     if (!verdict) return
@@ -368,8 +445,24 @@ export default function App() {
                   aria-live="polite"
                   aria-atomic="true"
                 >
-                  {stage === 'loading' ? (
+                  {stage === 'loading' || stage === 'retrieved' ? (
                     <div className="evaluating">
+                      {tickerCols.length > 0 && (
+                        <div className="dish-ticker" aria-hidden="true">
+                          {tickerCols.map((col, ci) => (
+                            <div className="dish-ticker-col" key={ci}>
+                              <div
+                                className="dish-ticker-track"
+                                style={{ animationDuration: `${4 + ci * 1.5}s` }}
+                              >
+                                {col.map((name, i) => (
+                                  <span key={`${name}-${i}`}>{name}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="dot-loader" aria-hidden="true">
                         {Array.from({ length: 12 }, (_, i) => (
                           <i
@@ -382,6 +475,12 @@ export default function App() {
                         ))}
                       </div>
                       <h2>Evaluating...</h2>
+                      {scanTotal > 0 && (
+                        <div className="scan-count">
+                          {scanCount.toLocaleString()} / {scanTotal} dishes
+                          scanned
+                        </div>
+                      )}
                     </div>
                   ) : stage === 'result' && verdict ? (
                     <div
@@ -477,7 +576,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {photo && stage !== 'loading' && (
+          {photo && stage !== 'loading' && stage !== 'retrieved' && (
             <button className="reset-button" onClick={reset}>
               <RotateCcw size={15} />
               Try another photo
@@ -579,9 +678,13 @@ export default function App() {
               <div className="readout-block">
                 <h3>Dish photo prototypes</h3>
                 <p className="proto-note">
-                  Nearest dish <strong>{verdict.prototype.dish}</strong> ·
-                  centered score {verdict.prototype.similarity.toFixed(3)} ·
-                  margin {verdict.prototype.margin.toFixed(3)} ·{' '}
+                  Nearest dish <strong>{verdict.prototype.dish}</strong> (
+                  {verdict.prototype.fromKhana
+                    ? 'multi-photo'
+                    : 'single-photo'}{' '}
+                  anchor) · centered score{' '}
+                  {verdict.prototype.similarity.toFixed(3)} · margin{' '}
+                  {verdict.prototype.margin.toFixed(3)} ·{' '}
                   <span
                     className={
                       verdict.prototype.used ? 'proto-used' : 'proto-unused'
@@ -657,7 +760,10 @@ export default function App() {
                 <dt>catalog dishes</dt>
                 <dd>{verdict.metadata.catalogDishes}</dd>
                 <dt>dish prototypes</dt>
-                <dd>{verdict.metadata.dishPrototypes}</dd>
+                <dd>
+                  {verdict.metadata.dishPrototypes} (
+                  {verdict.metadata.khanaPrototypes} khana)
+                </dd>
                 <dt>proto scoring</dt>
                 <dd>{verdict.metadata.protoScoring}</dd>
                 <dt>softmax temp</dt>

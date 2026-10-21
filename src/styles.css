@@ -292,12 +292,84 @@ main {
 }
 .evaluating {
   position: absolute;
-  top: 23%;
+  inset: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 46px;
+}
+.dish-ticker {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 6px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent);
+}
+.dish-ticker-col {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+.dish-ticker-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  animation: dish-scroll 5s linear infinite;
+  will-change: transform;
+}
+.dish-ticker-col:nth-child(2) .dish-ticker-track {
+  animation-direction: reverse;
+}
+.dish-ticker-track span {
+  font-size: 11px;
+  line-height: 1;
+  color: #ffd9c2;
+  opacity: 0.72;
+  white-space: nowrap;
+  text-transform: capitalize;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 3px #000a;
+}
+@keyframes dish-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+.evaluating .dot-loader,
+.evaluating h2,
+.evaluating .scan-count {
+  position: relative;
+  z-index: 1;
+}
+.scan-count {
+  margin-top: -28px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #ffce9e;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px #000c;
 }
 .dot-loader {
   height: 145px;
