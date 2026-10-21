@@ -110,7 +110,7 @@ function verdict({
       inferenceMs: 12,
       imageSize: { width: 10, height: 10 },
       uploadBytes: 100,
-      torch: '2.14.1',
+      backend: 'multimodalembedding@001 d1408 (vertex)',
       host: 'test',
     },
   }

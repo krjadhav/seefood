@@ -25,7 +25,7 @@ type Meta = {
   inferenceMs: number
   imageSize: { width: number; height: number }
   uploadBytes: number
-  torch: string
+  backend: string
   host: string
 }
 type Prototype = {
@@ -80,6 +80,10 @@ type Verdict = {
 // Jev step runs; it will instead hold until Jev's response returns.
 const RETRIEVED_HOLD_MS = 3000
 
+// Backend base URL. Empty in dev (Vite proxies /api); set VITE_API_BASE_URL at
+// build time for the deployed PWA to reach a public backend. No trailing slash.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+
 const samples: Photo[] = [
   { url: '/images/hotdog.jpg', name: 'Hot dog' },
   { url: '/images/pizza.jpg', name: 'Pizza' },
@@ -125,7 +129,7 @@ export default function App() {
     try {
       const form = new FormData()
       form.append('image', blob, display.name || 'image')
-      const response = await fetch('/api/classify', {
+      const response = await fetch(`${API_BASE}/api/classify`, {
         method: 'POST',
         body: form,
       })
@@ -245,7 +249,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true
-    fetch('/api/dishes')
+    fetch(`${API_BASE}/api/dishes`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (active && data?.names) setDishes(data.names)
@@ -777,8 +781,8 @@ export default function App() {
                 </dd>
                 <dt>upload size</dt>
                 <dd>{(verdict.metadata.uploadBytes / 1024).toFixed(1)} KB</dd>
-                <dt>torch</dt>
-                <dd>{verdict.metadata.torch}</dd>
+                <dt>backend</dt>
+                <dd>{verdict.metadata.backend}</dd>
                 <dt>host</dt>
                 <dd>{verdict.metadata.host}</dd>
               </dl>

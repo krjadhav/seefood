@@ -1,0 +1,15 @@
+# Upload rules for `gcloud run deploy --source`. Overrides .gitignore, so the
+# (gitignored) label_emb_cache.npz IS uploaded and baked — avoiding a Vertex
+# label burst on every cold start.
+.git/
+node_modules/
+dist/
+google_embeddinggemma_2/
+indian_food_dataset*/
+test-results/
+playwright-report/
+**/__pycache__/
+**/*.pyc
+server/_local_space/
+server/*.vertex*.npz
+# Keep: server/label_emb_cache.npz, server/prototypes.npz, server/dish_catalog.json

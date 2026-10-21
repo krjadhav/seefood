@@ -1,0 +1,20 @@
+# Never ship these into the API image.
+google_embeddinggemma_2/
+indian_food_dataset*/
+node_modules/
+dist/
+tests/
+test-results/
+playwright-report/
+.git/
+**/__pycache__/
+**/*.pyc
+
+# Server-local build scratch and backups.
+server/_local_space/
+server/*.vertex*.npz
+
+# Khana-only partial deploy: exclude the Tarla bundle (re-include when full
+# parity is built + the label cache is regenerated to match).
+server/tarla_prototypes.npz
+server/tarla_catalog.json

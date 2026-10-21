@@ -15,11 +15,9 @@ import time
 from pathlib import Path
 
 import numpy as np
-import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-from sentence_transformers import SentenceTransformer
 
 from embed import get_embedder
 from labels import FOOD_ALL, NON_FOOD_LABELS
@@ -437,7 +435,7 @@ async def classify(image: UploadFile = File(...)) -> dict:
             "inferenceMs": infer_ms,
             "imageSize": {"width": pil.width, "height": pil.height},
             "uploadBytes": len(raw),
-            "torch": torch.__version__,
+            "backend": _state.get("model_name", MODEL_NAME),
             "host": platform.platform(),
         },
     }
