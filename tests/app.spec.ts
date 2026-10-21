@@ -122,6 +122,19 @@ function verdict({
 }
 
 async function mockClassify(page: Page, overrides?: Overrides) {
+  // Stub Turnstile so getTurnstileToken() resolves instantly in tests instead
+  // of loading the real (domain-bound) widget and timing out on localhost.
+  await page.addInitScript(() => {
+    let cb: ((t: string) => void) | null = null
+    ;(window as unknown as { turnstile: unknown }).turnstile = {
+      render: (_el: unknown, opts: { callback?: (t: string) => void }) => {
+        cb = opts.callback ?? null
+        return 'test-widget'
+      },
+      execute: () => cb?.('test-token'),
+      reset: () => {},
+    }
+  })
   await page.route('**/api/classify', async (route) => {
     // Hold briefly so the transient "Evaluating..." state is observable.
     await new Promise((resolve) => setTimeout(resolve, 300))
@@ -290,6 +303,17 @@ test('rejects unsupported, corrupt, and oversized images', async ({ page }) => {
 })
 
 test('a backend outage surfaces a clear error', async ({ page }) => {
+  await page.addInitScript(() => {
+    let cb: ((t: string) => void) | null = null
+    ;(window as unknown as { turnstile: unknown }).turnstile = {
+      render: (_el: unknown, opts: { callback?: (t: string) => void }) => {
+        cb = opts.callback ?? null
+        return 'test-widget'
+      },
+      execute: () => cb?.('test-token'),
+      reset: () => {},
+    }
+  })
   await page.route('**/api/classify', (route) => route.abort())
   await page.goto('/')
   await page

@@ -20,8 +20,11 @@ Config via env:
 """
 from __future__ import annotations
 
+import json
 import os
 import time
+import urllib.parse
+import urllib.request
 from collections import defaultdict, deque
 
 from fastapi import HTTPException, Request
@@ -37,6 +40,19 @@ ALLOWED_ORIGINS = {
 RATE_PER_MIN = int(os.environ.get("SEEFOOD_RATE_PER_MIN", "10"))
 DAILY_CAP = int(os.environ.get("SEEFOOD_DAILY_CAP", "800"))
 ENFORCE_ORIGIN = os.environ.get("SEEFOOD_ENFORCE_ORIGIN", "1") == "1"
+
+# Cloudflare Turnstile: proves the request came from a real browser on our
+# domain (origin headers are spoofable; a Turnstile token is not). Enforced only
+# when a secret is configured — disabled in local dev with no secret.
+TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET") or ""
+TURNSTILE_ACTION = os.environ.get("SEEFOOD_TURNSTILE_ACTION", "classify")
+TURNSTILE_ENABLED = bool(TURNSTILE_SECRET) and os.environ.get(
+    "SEEFOOD_TURNSTILE_ENABLED", "1"
+) == "1"
+ALLOWED_HOSTNAMES = {
+    urllib.parse.urlparse(o).hostname for o in ALLOWED_ORIGINS
+} | {"localhost", "127.0.0.1"}
+SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 _hits: dict[str, deque] = defaultdict(deque)  # ip -> recent request timestamps
 _day = {"key": "", "count": 0}
@@ -80,15 +96,48 @@ def _origin_and_rate(request: Request) -> None:
         _hits.pop(next(iter(_hits)), None)
 
 
+def _verify_turnstile(request: Request) -> None:
+    """Reject unless the request carries a valid, single-use Turnstile token for
+    our action+domain. The real 'only from my site' lock."""
+    token = request.headers.get("cf-turnstile-response", "")
+    if not token:
+        raise HTTPException(403, "Missing verification token.")
+    body = urllib.parse.urlencode(
+        {
+            "secret": TURNSTILE_SECRET,
+            "response": token,
+            "remoteip": _client_ip(request),
+        }
+    ).encode()
+    try:
+        req = urllib.request.Request(SITEVERIFY, data=body)
+        with urllib.request.urlopen(req, timeout=5) as r:
+            result = json.loads(r.read())
+    except Exception:
+        # Fail closed: if we can't verify, don't spend a Vertex call.
+        raise HTTPException(503, "Verification unavailable. Try again.")
+    ok = (
+        result.get("success") is True
+        and result.get("action", TURNSTILE_ACTION) == TURNSTILE_ACTION
+        and result.get("hostname") in ALLOWED_HOSTNAMES
+    )
+    if not ok:
+        raise HTTPException(403, "Verification failed. Reload the app and retry.")
+
+
 def guard_light(request: Request) -> None:
     """Origin + rate limit only. For cheap endpoints (no Vertex call)."""
     _origin_and_rate(request)
 
 
 def guard(request: Request) -> None:
-    """Full guard for the costly classify path: origin + rate + global daily cap.
-    The daily cap is the bankruptcy bound — it only counts paid Vertex calls."""
+    """Full guard for the costly classify path: origin + Turnstile + rate +
+    global daily cap. The daily cap is the bankruptcy bound; Turnstile is the
+    anti-abuse lock. Both run before the cap increments, so rejected requests
+    don't consume the day's budget."""
     _origin_and_rate(request)
+    if TURNSTILE_ENABLED:
+        _verify_turnstile(request)
     now = time.time()
     today = time.strftime("%Y-%m-%d", time.gmtime(now))
     if _day["key"] != today:
@@ -108,4 +157,5 @@ def status() -> dict:
         "ratePerMin": RATE_PER_MIN,
         "dailyCap": DAILY_CAP,
         "todayCount": _day["count"],
+        "turnstile": TURNSTILE_ENABLED,
     }

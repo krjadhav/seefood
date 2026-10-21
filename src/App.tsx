@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getTurnstileToken } from './turnstile'
 import { Camera, Check, Info, RotateCcw, Upload, X } from 'lucide-react'
 
 type Photo = { url: string; name: string }
@@ -133,9 +134,11 @@ export default function App() {
     try {
       const form = new FormData()
       form.append('image', blob, display.name || 'image')
+      const token = await getTurnstileToken()
       const response = await fetch(`${API_BASE}/api/classify`, {
         method: 'POST',
         body: form,
+        headers: token ? { 'cf-turnstile-response': token } : undefined,
       })
       if (!response.ok) throw new Error(String(response.status))
       const data: Verdict = await response.json()
