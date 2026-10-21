@@ -81,12 +81,12 @@ type Verdict = {
 const RETRIEVED_HOLD_MS = 3000
 
 const samples: Photo[] = [
-  { url: '/images/dosa.jpg', name: 'Masala dosa' },
+  { url: '/images/hotdog.jpg', name: 'Hot dog' },
+  { url: '/images/pizza.jpg', name: 'Pizza' },
   { url: '/images/biryani.jpg', name: 'Biryani' },
   { url: '/images/samosa.jpg', name: 'Samosa' },
   { url: '/images/gulabjamun.jpg', name: 'Gulab jamun' },
-  { url: '/images/momo.jpg', name: 'Steamed momo' },
-  { url: '/images/pizza.jpg', name: 'Pizza' },
+  { url: '/images/dosa.jpg', name: 'Masala dosa' },
 ]
 
 export default function App() {
@@ -387,7 +387,7 @@ export default function App() {
                 <div className="app-tagline">“The Shazam for Food”</div>
                 <div className="welcome-screen">
                   <div className="food-background" aria-hidden="true">
-                    <img src="/images/hotdog.jpg" alt="" />
+                    <img src="/images/salmon.jpg" alt="" />
                     <img src="/images/pasta.jpg" alt="" />
                   </div>
                   <h2>Let’s Get Started</h2>
