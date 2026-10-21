@@ -427,12 +427,9 @@ main {
   right: 0;
   text-align: center;
   background: #18972d;
-  border-top: 2px solid #c6c6c6;
-  border-bottom: 2px solid #c6c6c6;
   height: 80px;
   display: grid;
   place-items: center;
-  isolation: isolate;
 }
 .result-banner.food {
   top: 0;
@@ -452,7 +449,7 @@ main {
   background: inherit;
   display: grid;
   place-items: center;
-  z-index: 1;
+  z-index: -1;
 }
 .food .verdict-icon {
   top: 56px;
@@ -472,7 +469,7 @@ main {
 }
 .result-banner h2 {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   padding: 0 70px;
   text-transform: capitalize;
 }
