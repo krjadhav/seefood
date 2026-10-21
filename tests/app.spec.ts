@@ -28,7 +28,12 @@ function verdict({
     topSimilarity: 0.671,
     top: [
       { label: topLabel, similarity: 0.671, probability: 0.02, isFood },
-      { label: 'bruschetta', similarity: 0.66, probability: 0.018, isFood: true },
+      {
+        label: 'bruschetta',
+        similarity: 0.66,
+        probability: 0.018,
+        isFood: true,
+      },
       { label: 'a dog', similarity: 0.59, probability: 0.01, isFood: false },
     ],
     prototype: {
@@ -164,7 +169,9 @@ test('upload shows Evaluating, posts to the classifier, then a result', async ({
   await page
     .getByLabel('Upload a food image')
     .setInputFiles('public/images/burger.jpg')
-  await expect(page.getByRole('heading', { name: 'Evaluating...' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Evaluating...' }),
+  ).toBeVisible()
   await expect(page.locator('.result-banner h2')).toHaveText('Pizza')
   await expect(page.locator('.uploaded-photo')).toHaveAttribute('src', /^blob:/)
   expect(posted).toEqual(['/api/classify'])
@@ -172,53 +179,6 @@ test('upload shows Evaluating, posts to the classifier, then a result', async ({
   await expect(
     page.getByRole('heading', { name: 'Let’s Get Started' }),
   ).toBeVisible()
-})
-
-test('result panel lists top matches and prototype match', async ({
-  page,
-}) => {
-  await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
-  await page.goto('/')
-  await page
-    .getByLabel('Upload a food image')
-    .setInputFiles('public/images/pizza.jpg')
-  const readout = page.locator('.readout')
-  await expect(readout).toBeVisible()
-  await expect(readout.getByText('FOOD', { exact: true })).toBeVisible()
-  await expect(readout.getByText('Dish photo prototypes')).toBeVisible()
-  await expect(readout.getByText('used for name')).toBeVisible()
-  await expect(readout.getByText('Dish info')).toBeVisible()
-  await expect(readout.getByText('Closest described dishes')).toBeVisible()
-  await expect(readout.getByText('Ranked dishes (JSON)')).toBeVisible()
-  await expect(
-    readout.getByRole('button', { name: 'Copy JSON' }),
-  ).toBeVisible()
-  await expect(readout).toContainText('rice, lentils')
-})
-
-test('copy JSON writes the ranked dishes to the clipboard', async ({ page }) => {
-  // Stub writeText to avoid contending on the real system clipboard (the
-  // Chrome channel uses it), which flakes under parallel tests.
-  await page.addInitScript(() => {
-    ;(window as unknown as { __copied?: string }).__copied = ''
-    navigator.clipboard.writeText = async (text: string) => {
-      ;(window as unknown as { __copied?: string }).__copied = text
-    }
-  })
-  await mockClassify(page, { name: 'Biryani', prototypeDish: 'biryani' })
-  await page.goto('/')
-  await page
-    .getByLabel('Upload a food image')
-    .setInputFiles('public/images/pizza.jpg')
-  await page.getByRole('button', { name: 'Copy JSON' }).click()
-  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible()
-  const text = await page.evaluate(
-    () => (window as unknown as { __copied?: string }).__copied || '',
-  )
-  const parsed = JSON.parse(text)
-  expect(Object.keys(parsed)).toContain('Biryani')
-  expect(parsed.Biryani).toHaveProperty('ingredients')
-  expect(JSON.stringify(parsed)).not.toContain('similarity')
 })
 
 test('non-food images report Not Food', async ({ page }) => {
@@ -234,7 +194,6 @@ test('non-food images report Not Food', async ({ page }) => {
     .setInputFiles('public/images/pizza.jpg')
   await expect(page.locator('.result-banner h2')).toHaveText('Not Food')
   await expect(page.locator('.result-banner.not-food')).toBeVisible()
-  await expect(page.locator('.readout-tag.not')).toHaveText('NOT FOOD')
 })
 
 test('clipboard paste classifies an image', async ({ page }) => {

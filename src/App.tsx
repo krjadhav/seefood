@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Check, Copy, Info, RotateCcw, Upload, X } from 'lucide-react'
+import { Camera, Check, Info, RotateCcw, Upload, X } from 'lucide-react'
 
 type Photo = { url: string; name: string }
 type Label = {
@@ -99,7 +99,6 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [offline, setOffline] = useState(!navigator.onLine)
   const [clipboardBusy, setClipboardBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [dishes, setDishes] = useState<string[]>([])
   const input = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
@@ -254,19 +253,6 @@ export default function App() {
       return [...rot, ...rot]
     })
   }, [stage, verdict, dishes])
-
-  const copyRanked = async () => {
-    if (!verdict) return
-    try {
-      await navigator.clipboard.writeText(
-        JSON.stringify(verdict.rankedDishes, null, 2),
-      )
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError('Couldn’t copy to clipboard. Select the JSON and copy manually.')
-    }
-  }
 
   const reset = () => {
     cleanup()
@@ -423,7 +409,9 @@ export default function App() {
                             <div className="dish-ticker-col" key={ci}>
                               <div
                                 className="dish-ticker-track"
-                                style={{ animationDuration: `${4 + ci * 1.5}s` }}
+                                style={{
+                                  animationDuration: `${4 + ci * 1.5}s`,
+                                }}
                               >
                                 {col.map((name, i) => (
                                   <span key={`${name}-${i}`}>{name}</span>
@@ -542,201 +530,22 @@ export default function App() {
             </button>
           )}
         </section>
-        {verdict && stage === 'result' ? (
-          <aside className="readout" aria-label="Model output">
-            <header className="readout-head">
-              <span className={`readout-tag ${verdict.isFood ? '' : 'not'}`}>
-                {verdict.isFood ? 'FOOD' : 'NOT FOOD'}
-              </span>
-              <h2>{verdict.name}</h2>
-              <p>
-                Named by{' '}
-                <strong>
-                  {verdict.source === 'prototype'
-                    ? 'dish photo prototype'
-                    : 'text label'}
-                </strong>{' '}
-                · text top <strong>{verdict.topLabel}</strong> cosine{' '}
-                {verdict.topSimilarity.toFixed(3)} · food probability{' '}
-                {(verdict.foodProbability * 100).toFixed(1)}%
-              </p>
-            </header>
-            {verdict.dish && (
-              <div className="readout-block">
-                <h3>Dish info</h3>
-                <dl className="meta-grid">
-                  {verdict.dish.course && (
-                    <>
-                      <dt>course</dt>
-                      <dd>{verdict.dish.course}</dd>
-                    </>
-                  )}
-                  {verdict.dish.flavor && (
-                    <>
-                      <dt>flavor</dt>
-                      <dd>{verdict.dish.flavor}</dd>
-                    </>
-                  )}
-                  {verdict.dish.diet && (
-                    <>
-                      <dt>diet</dt>
-                      <dd>{verdict.dish.diet}</dd>
-                    </>
-                  )}
-                  {(verdict.dish.region || verdict.dish.state) && (
-                    <>
-                      <dt>origin</dt>
-                      <dd>
-                        {[verdict.dish.state, verdict.dish.region]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </dd>
-                    </>
-                  )}
-                  {verdict.dish.ingredients && (
-                    <>
-                      <dt>ingredients</dt>
-                      <dd>{verdict.dish.ingredients}</dd>
-                    </>
-                  )}
-                </dl>
-              </div>
-            )}
-            {verdict.described.length > 0 && (
-              <div className="readout-block">
-                <h3>Closest described dishes</h3>
-                <p className="proto-note">
-                  Image matched to CSV dish descriptions · ● = has photo
-                  prototype
-                </p>
-                <ul className="label-list">
-                  {verdict.described.slice(0, 6).map((row) => (
-                    <li key={row.name}>
-                      <span className="label-row">
-                        <span
-                          className={row.hasPhoto ? 'photo-dot' : 'nophoto-dot'}
-                        />
-                        <span className="label-name">{row.name}</span>
-                        <span className="label-score">
-                          {row.similarity.toFixed(3)}
-                        </span>
-                      </span>
-                      {(row.flavor || row.course || row.region) && (
-                        <span className="described-meta">
-                          {[row.flavor, row.course, row.region]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {verdict.prototype && (
-              <div className="readout-block">
-                <h3>Dish photo prototypes</h3>
-                <p className="proto-note">
-                  Nearest dish <strong>{verdict.prototype.dish}</strong> (
-                  {verdict.prototype.fromKhana
-                    ? 'multi-photo'
-                    : 'single-photo'}{' '}
-                  anchor) · centered score{' '}
-                  {verdict.prototype.similarity.toFixed(3)} · margin{' '}
-                  {verdict.prototype.margin.toFixed(3)} ·{' '}
-                  <span
-                    className={
-                      verdict.prototype.used ? 'proto-used' : 'proto-unused'
-                    }
-                  >
-                    {verdict.prototype.used ? 'used for name' : 'not used'}
-                  </span>
-                </p>
-                <ul className="label-list">
-                  {verdict.prototype.top.slice(0, 5).map((row) => (
-                    <li key={row.dish}>
-                      <span className="label-row">
-                        <span className="food-dot" />
-                        <span className="label-name">{row.dish}</span>
-                        <span className="label-score">
-                          {row.similarity.toFixed(3)}
-                        </span>
-                      </span>
-                      <span className="label-bar">
-                        <span
-                          style={{
-                            width: `${Math.round(Math.max(0, row.similarity / (verdict.prototype!.top[0].similarity || 1)) * 100)}%`,
-                          }}
-                        />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="readout-block">
-              <h3>Top label matches</h3>
-              <ul className="label-list">
-                {verdict.top.map((row) => (
-                  <li key={row.label}>
-                    <span className="label-row">
-                      <span className={row.isFood ? 'food-dot' : 'not-dot'} />
-                      <span className="label-name">{row.label}</span>
-                      <span className="label-score">
-                        {row.similarity.toFixed(3)}
-                      </span>
-                    </span>
-                    <span className="label-bar">
-                      <span
-                        style={{
-                          width: `${Math.round(row.probability * 100)}%`,
-                        }}
-                      />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {Object.keys(verdict.rankedDishes).length > 0 && (
-              <div className="readout-block">
-                <div className="ranked-head">
-                  <h3>Ranked dishes (JSON)</h3>
-                  <button
-                    className="copy-button"
-                    onClick={() => void copyRanked()}
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                    {copied ? 'Copied' : 'Copy JSON'}
-                  </button>
-                </div>
-                <p className="proto-note">
-                  Top {Object.keys(verdict.rankedDishes).length} dishes by
-                  description match, each with its metadata (no scores).
-                </p>
-                <pre className="ranked-json">
-                  {JSON.stringify(verdict.rankedDishes, null, 2)}
-                </pre>
-              </div>
-            )}
-          </aside>
-        ) : (
-          <section className="samples" aria-labelledby="sample-heading">
-            <p>Try a sample and see for yourself.</p>
-            <div className="sample-list">
-              {samples.map((item) => (
-                <button
-                  key={item.url}
-                  className={`sample-card ${photo?.url === item.url ? 'selected' : ''}`}
-                  onClick={() => void sample(item)}
-                  aria-label={`Try sample: ${item.name}`}
-                >
-                  <img src={item.url} alt={item.name} />
-                  <span>{item.name}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
+        <section className="samples" aria-labelledby="sample-heading">
+          <p>Try a sample and see for yourself.</p>
+          <div className="sample-list">
+            {samples.map((item) => (
+              <button
+                key={item.url}
+                className={`sample-card ${photo?.url === item.url ? 'selected' : ''}`}
+                onClick={() => void sample(item)}
+                aria-label={`Try sample: ${item.name}`}
+              >
+                <img src={item.url} alt={item.name} />
+                <span>{item.name}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       </main>
       <footer></footer>
     </div>
