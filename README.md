@@ -1,19 +1,40 @@
 # SeeFood
 
-A mobile-first frontend PWA recreating the SeeFood interface from _Silicon Valley_. Built with React, TypeScript, and Vite.
+A mobile-first PWA recreating the SeeFood interface from _Silicon Valley_, now
+wired to a real classifier. Instead of only "Hotdog / Not Hotdog", it names the
+food it sees (or says **Not Food**) using a local **EmbeddingGemma 2** model.
+Built with React, TypeScript, and Vite, with a small FastAPI backend.
 
-The main screen follows the supplied reference: a bright red logo header, black-outlined white lettering, a white tagline strip, stacked salmon/pasta photography, and large text over the photos. Sample evaluation uses a ring of red dots and outlined lettering; results use a green top banner or red bottom banner with a large check or cross. On mobile, the central prompt becomes a camera action. The surrounding site, help panels, and PWA chrome use a dark theme.
+The main screen follows the supplied reference: a bright red logo header, black-outlined white lettering, a white tagline strip, stacked salmon/pasta photography, and large text over the photos. Evaluation uses a ring of red dots and outlined lettering; results use a green top banner (food name) or red bottom banner (Not Food) with a large check or cross, plus a side panel showing the model's top label matches and metadata.
+
+## How recognition works
+
+The image and the candidate labels share one multimodal embedding space. The
+backend embeds the pasted image, cosine-ranks a list of food and non-food
+labels against it, and returns the top food name — or `Not Food` when a non-food
+label wins. See [`server/README.md`](server/README.md).
 
 ## Run locally
 
-Requires Node.js 20.19+ or 22.12+.
+Requires Node.js 20.19+ or 22.12+, Python 3.11+, and the model weights in
+`google_embeddinggemma_2/`.
+
+Start the backend (first run downloads Python deps and is slow to warm up):
+
+```sh
+pip install -r server/requirements.txt
+uvicorn main:app --app-dir server --port 8000
+```
+
+Then the frontend (Vite proxies `/api` to the backend on port 8000):
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. To test the installable production build and offline behavior:
+Open the local URL printed by Vite, then paste, drop, upload, or scan a photo.
+To test the production build and offline behavior:
 
 ```sh
 npm run build
@@ -27,14 +48,19 @@ npm run preview
 - On mobile, Scan food opens the device’s camera-capable file picker using `capture="environment"`. The exact chooser depends on the device and browser.
 - Preview local images, replace them, and reset. Uploads never leave the browser and aren’t persisted.
 - Validate file type, 20 MB size limit, and image decoding. Supported formats: JPEG, PNG, WebP, GIF, AVIF. Convert HEIC images to JPEG or PNG first.
-- Try three sample photos with loading, hotdog, and not-hotdog demo states.
+- Send the image to the local backend, show an `Evaluating...` state, then the recognized food name or `Not Food`.
+- Read the side panel: the top label matches with cosine scores and the full model metadata (device, dtype, embedding dimension and norm, image tokens, inference time, image and upload size).
+- Try three sample photos routed through the same classifier.
 - Install through a supported browser’s PWA prompt or follow the built-in home-screen instructions.
 - Reload offline after the production service worker has installed. The app shell, sample images, and fonts are cached locally.
 - Keyboard focus states, accessible controls, screen reader announcements, and reduced-motion support.
 
-## Frontend scope
+## Scope and privacy
 
-**Food recognition is not connected.** Sample results are predetermined and explicitly marked as demos. User-provided images show a preview and explain the missing classifier. There are no arbitrary predictions, API keys, accounts, analytics, or backend services.
+Recognition runs against the **local** FastAPI backend — images are posted to
+`/api/classify` on your own machine, not to any third-party service. There are
+no API keys, accounts, or analytics. If the backend isn't running, the UI shows
+a clear error instead of a result.
 
 Clipboard button access requires HTTPS or localhost and browser permission. Standard keyboard paste is the fallback. Camera capture is a browser/device capability; the frontend does not directly request a live camera stream.
 
@@ -45,7 +71,7 @@ npm run build
 npm test
 ```
 
-Tests use locally installed Google Chrome. In CI, they use Playwright Chromium; install it with `npx playwright install --with-deps chromium`. Playwright starts the production preview server automatically. Tests cover desktop and mobile viewports, local upload privacy, paste, drag-and-drop, invalid files, sample state transitions, camera chooser wiring, install UI, and offline reloads.
+Tests use locally installed Google Chrome. In CI, they use Playwright Chromium; install it with `npx playwright install --with-deps chromium`. Playwright starts the production preview server automatically and **mocks `/api/classify`**, so the model backend is not needed to run tests. Tests cover desktop and mobile viewports, the Evaluating → result flow, the Not Food verdict, the metadata panel, backend-outage errors, paste, drag-and-drop, invalid files, camera chooser wiring, and offline reloads.
 
 ```sh
 npm run format
