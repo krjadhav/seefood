@@ -113,6 +113,91 @@ FOOD_LABELS = [
     "latte",
 ]
 
+# Dishes from indian_food_dataset/labels.txt. These are also the prototype
+# (visual centroid) names, so a text match and an image match line up.
+INDIAN_LABELS = [
+    "aloo gobi",
+    "aloo methi",
+    "aloo mutter",
+    "aloo paratha",
+    "amritsari kulcha",
+    "anda curry",
+    "balushahi",
+    "banana chips",
+    "besan laddu",
+    "bhindi masala",
+    "biryani",
+    "boondi laddu",
+    "chaas",
+    "chana masala",
+    "chapati",
+    "chicken pizza",
+    "chicken wings",
+    "chikki",
+    "chivda",
+    "chole bhature",
+    "dabeli",
+    "dal khichdi",
+    "dhokla",
+    "falooda",
+    "fish curry",
+    "gajar ka halwa",
+    "garlic bread",
+    "garlic naan",
+    "ghevar",
+    "grilled sandwich",
+    "gujhia",
+    "gulab jamun",
+    "hara bhara kabab",
+    "idiyappam",
+    "idli",
+    "jalebi",
+    "kaju katli",
+    "khakhra",
+    "kheer",
+    "kulfi",
+    "margherita pizza",
+    "masala dosa",
+    "masala papad",
+    "medu vada",
+    "misal pav",
+    "modak",
+    "moong dal halwa",
+    "murukku",
+    "mysore pak",
+    "navratan korma",
+    "neer dosa",
+    "onion pakoda",
+    "palak paneer",
+    "paneer masala",
+    "paneer pizza",
+    "pani puri",
+    "paniyaram",
+    "papdi chaat",
+    "patrode",
+    "pav bhaji",
+    "pepperoni pizza",
+    "phirni",
+    "poha",
+    "pongal",
+    "puri bhaji",
+    "rajma chawal",
+    "rasgulla",
+    "rava dosa",
+    "sabudana khichdi",
+    "sabudana vada",
+    "samosa",
+    "seekh kebab",
+    "set dosa",
+    "sev puri",
+    "solkadhi",
+    "steamed momo",
+    "thali",
+    "thukpa",
+    "uttapam",
+    "vada pav",
+]
+
 NON_FOOD_LABELS = [
     "a person",
     "a face",
@@ -156,6 +241,14 @@ NON_FOOD_LABELS = [
     "a logo",
 ]
 
-ALL_LABELS = [(name, True) for name in FOOD_LABELS] + [
+# De-duplicate food names while preserving order (western list first).
+_seen: set[str] = set()
+FOOD_ALL = [
+    name
+    for name in FOOD_LABELS + INDIAN_LABELS
+    if not (name in _seen or _seen.add(name))
+]
+
+ALL_LABELS = [(name, True) for name in FOOD_ALL] + [
     (name, False) for name in NON_FOOD_LABELS
 ]
