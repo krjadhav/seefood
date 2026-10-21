@@ -7,3 +7,12 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# Local model weights (download separately, ~1.4 GB)
+google_embeddinggemma_2/
+
+# Python backend
+__pycache__/
+*.pyc
+.venv/
+venv/
