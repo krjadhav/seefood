@@ -92,68 +92,97 @@ class LocalEmbedder:
 
 
 class VertexEmbedder:
-    """Hosted Gemini Embedding 2 (Unified Multimodal) on Vertex AI.
+    """Hosted multimodal embeddings on Vertex AI.
+
+    Uses `multimodalembedding@001` (the unified image+text model actually
+    available in-project; the pricing-page "Gemini Embedding 2" was 404 here).
+    Text and image embed into ONE shared space via the predict API. Dimension
+    is configurable (1408 default, or 512/256/128).
 
     Config via env:
-      GOOGLE_CLOUD_PROJECT   - GCP project id
-      GOOGLE_CLOUD_LOCATION  - region, e.g. us-central1 (default)
-      SEEFOOD_VERTEX_MODEL   - model id for the unified multimodal embedding
-      SEEFOOD_EMBED_DIM      - output dimension (e.g. 768) to match prototypes
+      GOOGLE_CLOUD_PROJECT   - GCP project id (required)
+      GOOGLE_CLOUD_LOCATION  - region, default us-central1
+      SEEFOOD_VERTEX_MODEL   - publisher model, default multimodalembedding@001
+      SEEFOOD_EMBED_DIM      - output dim (1408 | 512 | 256 | 128), default 1408
 
-    NOTE: the exact preview request shape must be validated against your project
-    once access is available — the two `_embed_*` calls below are the ONLY spots
-    to adjust. Everything else (normalization, batching, routing) is provider-
-    agnostic. Auth uses Application Default Credentials (ADC).
+    Auth: Application Default Credentials (ADC). All artifacts must be rebuilt
+    with this provider — its space is unrelated to local EmbeddingGemma 2.
     """
 
-    name = "gemini-embedding-2 (vertex)"
     device = "vertex"
     dtype = "api"
 
     def __init__(self):
+        from google.cloud import aiplatform_v1 as aiv1
+
         self.project = os.environ["GOOGLE_CLOUD_PROJECT"]
         self.location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-        self.model = os.environ.get("SEEFOOD_VERTEX_MODEL", "gemini-embedding-2")
-        self.dim = int(os.environ.get("SEEFOOD_EMBED_DIM", "768"))
-        # Lazy import so the local path never needs the SDK installed.
-        from google import genai
-
-        self._client = genai.Client(
-            vertexai=True, project=self.project, location=self.location
+        self.model = os.environ.get("SEEFOOD_VERTEX_MODEL", "multimodalembedding@001")
+        self.dim = int(os.environ.get("SEEFOOD_EMBED_DIM", "1408"))
+        self.workers = int(os.environ.get("SEEFOOD_VERTEX_WORKERS", "8"))
+        self.name = f"{self.model} d{self.dim} (vertex)"
+        self._client = aiv1.PredictionServiceClient(
+            client_options={"api_endpoint": f"{self.location}-aiplatform.googleapis.com"}
+        )
+        self._endpoint = (
+            f"projects/{self.project}/locations/{self.location}"
+            f"/publishers/google/models/{self.model}"
         )
 
-    # --- the two calls to validate against the preview API ------------------
-    def _embed_text(self, text: str) -> np.ndarray:
-        from google.genai import types
+    def _predict(self, instance: dict) -> dict:
+        import random
+        import time
 
-        resp = self._client.models.embed_content(
-            model=self.model,
-            contents=text,
-            config=types.EmbedContentConfig(output_dimensionality=self.dim),
-        )
-        return np.asarray(resp.embeddings[0].values, dtype=np.float32)
+        from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
+        from google.protobuf import struct_pb2
+        from google.protobuf.json_format import ParseDict
 
-    def _embed_image_bytes(self, data: bytes, mime: str = "image/jpeg") -> np.ndarray:
-        from google.genai import types
+        inst = ParseDict(instance, struct_pb2.Value())
+        params = ParseDict({"dimension": self.dim}, struct_pb2.Value())
+        # Vertex online-prediction quota is low; back off on 429/503.
+        delay = 1.0
+        for attempt in range(8):
+            try:
+                resp = self._client.predict(
+                    endpoint=self._endpoint, instances=[inst], parameters=params
+                )
+                return dict(resp.predictions[0])
+            except (ResourceExhausted, ServiceUnavailable):
+                if attempt == 7:
+                    raise
+                time.sleep(delay + random.random())
+                delay = min(delay * 2, 30)
+        raise RuntimeError("unreachable")
 
-        resp = self._client.models.embed_content(
-            model=self.model,
-            contents=types.Part.from_bytes(data=data, mime_type=mime),
-            config=types.EmbedContentConfig(output_dimensionality=self.dim),
-        )
-        return np.asarray(resp.embeddings[0].values, dtype=np.float32)
+    def _jpeg_b64(self, pil) -> str:
+        import base64
 
-    # --- public, provider-agnostic surface ---------------------------------
-    def embed_image(self, pil) -> np.ndarray:
         buf = io.BytesIO()
         pil.convert("RGB").save(buf, format="JPEG", quality=90)
-        return _l2(self._embed_image_bytes(buf.getvalue()))
+        return base64.b64encode(buf.getvalue()).decode()
+
+    def embed_image(self, pil) -> np.ndarray:
+        pred = self._predict({"image": {"bytesBase64Encoded": self._jpeg_b64(pil)}})
+        return _l2(np.asarray(pred["imageEmbedding"], dtype=np.float32))
+
+    def _embed_text_one(self, text: str) -> np.ndarray:
+        pred = self._predict({"text": text[:1024]})
+        return np.asarray(pred["textEmbedding"], dtype=np.float32)
 
     def embed_images(self, pils: list) -> np.ndarray:
-        return _l2(np.vstack([self.embed_image(p) for p in pils]))
+        # One instance per request; parallelize to make bulk builds tractable.
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            vecs = list(pool.map(self.embed_image, pils))
+        return _l2(np.vstack(vecs))
 
     def embed_texts(self, texts: list[str]) -> np.ndarray:
-        return _l2(np.vstack([self._embed_text(t) for t in texts]))
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            vecs = list(pool.map(self._embed_text_one, texts))
+        return _l2(np.vstack(vecs))
 
 
 def get_embedder(model_dir: str) -> Embedder:

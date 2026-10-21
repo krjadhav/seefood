@@ -6,4 +6,4 @@ uvicorn[standard]
 python-multipart
 pillow
 numpy
-google-genai>=0.3.0
+google-cloud-aiplatform>=1.40.0
