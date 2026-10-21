@@ -4,6 +4,7 @@ import concurrent.futures as cf
 import csv
 import hashlib
 import json
+import re
 import threading
 import time
 from collections import Counter
@@ -72,6 +73,8 @@ class Site:
                     time.sleep(min(120, int(retry)) if retry.isdigit() else 5 * (attempt + 1))
                     continue
             r.raise_for_status()
+            if re.search(br'charset\s*=\s*["\']?utf-8', r.content[:8192], re.I):
+                r.encoding = 'utf-8'
             return r
 
     def discover(self):
@@ -128,9 +131,9 @@ class Site:
             urls = {u for u in urls if not any(p in urlsplit(u).path for p in ['/category/', '/tag/', '/product/', '/web-stories/', '/ingredient/', '/special-diet/', '/occasion/', '/method/'])}
         return sorted(urls)
 
-    def scrape(self, url, retry_errors=False):
+    def scrape(self, url, retry_errors=False, refresh=False):
         path = self.cache / (hashlib.sha256(url.encode()).hexdigest() + '.json')
-        if path.exists():
+        if path.exists() and not refresh:
             old = json.loads(path.read_text())
             if old['status'] != 'error' or not retry_errors:
                 return old
@@ -149,6 +152,10 @@ class Site:
                 except Exception:
                     pass
             data.update(source=self.host, url=normalize(response.url), scraped_at=now())
+            # Bong Eats has one recipe with unordered rather than ordered steps.
+            if self.host == 'www.bongeats.com' and not data['instructions']:
+                steps = scraper.soup.select('.recipe-process ul li')
+                data['instructions'] = '\n'.join(step.get_text(' ', strip=True) for step in steps)
             if data['title'] and data['ingredients'] and data['instructions']:
                 result.update(status='ok', recipe=data)
             else:
@@ -193,7 +200,7 @@ def collect(host, args):
     print(host, 'discovered', len(discovery['urls']), flush=True)
     results = []
     with cf.ThreadPoolExecutor(args.workers) as pool:
-        for result in pool.map(lambda u: site.scrape(u, args.retry_errors), urls):
+        for result in pool.map(lambda u: site.scrape(u, args.retry_errors, args.refresh), urls):
             results.append(result)
             if len(results) % 100 == 0:
                 print(host, len(results), '/', len(urls), dict(Counter(r['status'] for r in results)), flush=True)
@@ -229,6 +236,7 @@ def main():
     parser.add_argument('--delay', type=float, default=0.5, help='Minimum seconds between requests per site')
     parser.add_argument('--limit', type=int, default=0, help='Smoke test only; 0 means all discovered pages')
     parser.add_argument('--retry-errors', action='store_true')
+    parser.add_argument('--refresh', action='store_true', help='Re-extract even previously cached results')
     parser.add_argument('--rediscover', action='store_true')
     parser.add_argument('--export-only', action='store_true', help='Rebuild all outputs from cached results without network requests')
     parser.add_argument('--sites', nargs='+', choices=SITES, default=SITES)

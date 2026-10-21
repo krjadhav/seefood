@@ -78,3 +78,10 @@ The browser transport uses four tabs and at most two navigation starts per
 second. It does not solve challenges or use proxies. Cached HTML is parsed by
 the same recipe-scrapers pipeline. Browser discovery excludes query strings,
 comments, feeds, admin routes and policy/about pages.
+
+Validation: `.venv/bin/python -m unittest -v` checks extraction, cache reuse,
+deduplication, CSV serialization, UTF-8 decoding, and Bong Eats unordered steps.
+After a full export, `.venv/bin/python validate.py` checks every record and URL
+outcome. `--refresh` forces re-extraction of cached results for selected sites.
+The Bong Eats adapter adds an unordered-list fallback to recipe-scrapers;
+it never substitutes promotional text for missing cooking instructions.

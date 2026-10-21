@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import scrape
+import requests
 
 HTML = '''<html><script type="application/ld+json">{
 "@context":"https://schema.org", "@type":"Recipe", "name":"Test Dal",
@@ -15,6 +16,27 @@ HTML = '''<html><script type="application/ld+json">{
 }</script></html>'''
 
 class CollectorTests(unittest.TestCase):
+    def test_html_charset_overrides_requests_latin1_default(self):
+        response = requests.Response()
+        response.status_code = 200
+        response._content = '<meta charset="utf-8"><p>¼ tsp — café</p>'.encode()
+        response.encoding = 'ISO-8859-1'
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scrape, 'ROOT', Path(tmp)):
+            site = scrape.Site('example.com', 0)
+            with patch('scrape.requests.get', return_value=response):
+                self.assertIn('¼ tsp — café', site.get('https://example.com/dal').text)
+
+    def test_bong_eats_unordered_steps(self):
+        html = HTML + '''<div class="recipe-ingredients"><ul><li>¼ tsp salt</li></ul></div>
+        <div class="recipe-process"><ul><li>Mix.</li><li>Serve.</li></ul></div>'''
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scrape, 'ROOT', Path(tmp)):
+            site = scrape.Site('www.bongeats.com', 0)
+            response = type('Response', (), {'text': html, 'url': 'https://www.bongeats.com/recipe/test'})()
+            with patch.object(site, 'get', return_value=response):
+                result = site.scrape(response.url)
+                self.assertEqual(result['status'], 'ok')
+                self.assertEqual(result['recipe']['instructions'], 'Mix.\nServe.')
+
     def test_recipe_extraction_resume_and_csv_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(scrape, 'ROOT', Path(tmp)):
             site = scrape.Site('example.com', 0)
