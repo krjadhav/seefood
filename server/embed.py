@@ -113,6 +113,8 @@ class VertexEmbedder:
     dtype = "api"
 
     def __init__(self):
+        import threading
+
         from google.cloud import aiplatform_v1 as aiv1
 
         self.project = os.environ["GOOGLE_CLOUD_PROJECT"]
@@ -120,6 +122,12 @@ class VertexEmbedder:
         self.model = os.environ.get("SEEFOOD_VERTEX_MODEL", "multimodalembedding@001")
         self.dim = int(os.environ.get("SEEFOOD_EMBED_DIM", "1408"))
         self.workers = int(os.environ.get("SEEFOOD_VERTEX_WORKERS", "8"))
+        # Pace request *starts* under the per-minute online quota (600/min for
+        # multimodalembedding) so bulk builds never trigger 429 backoff storms.
+        rpm = int(os.environ.get("SEEFOOD_VERTEX_RPM", "480"))
+        self._interval = 60.0 / max(1, rpm)
+        self._rate_lock = threading.Lock()
+        self._next_at = 0.0
         self.name = f"{self.model} d{self.dim} (vertex)"
         self._client = aiv1.PredictionServiceClient(
             client_options={"api_endpoint": f"{self.location}-aiplatform.googleapis.com"}
@@ -129,6 +137,16 @@ class VertexEmbedder:
             f"/publishers/google/models/{self.model}"
         )
 
+    def _throttle(self) -> None:
+        import time
+
+        with self._rate_lock:
+            now = time.monotonic()
+            wait = self._next_at - now
+            self._next_at = max(now, self._next_at) + self._interval
+        if wait > 0:
+            time.sleep(wait)
+
     def _predict(self, instance: dict) -> dict:
         import random
         import time
@@ -136,6 +154,8 @@ class VertexEmbedder:
         from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable
         from google.protobuf import struct_pb2
         from google.protobuf.json_format import ParseDict
+
+        self._throttle()
 
         inst = ParseDict(instance, struct_pb2.Value())
         params = ParseDict({"dimension": self.dim}, struct_pb2.Value())

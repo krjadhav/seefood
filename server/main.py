@@ -45,6 +45,9 @@ TARLA_OVERRIDE_GAP = 0.0
 # score clears this; weaker Tarla matches (out-of-dataset foods landing on a
 # look-alike) defer to the curated text name.
 TARLA_TRUST = 0.55
+# Below this Jev Choice confidence, defer to a confident khana prototype rather
+# than Jev's uncertain pick among catalog look-alikes.
+JEV_MIN_CONFIDENCE = 0.5
 
 
 def _key(name: str) -> str:
@@ -420,9 +423,20 @@ async def classify(
     embedding_source = source
     jev_result = None
     if jevmod.available():
-        candidates = list(ranked_dishes.keys())
-        if is_food_final and display not in candidates:
-            candidates = [display] + candidates  # keep the visual pick selectable
+        # Seed Jev's shortlist with the prototype's VISUAL top matches (accurate)
+        # ahead of the noisy catalog text ranking, so the right dish is always
+        # selectable even when thousands of look-alikes crowd the text ranking.
+        seed: list[str] = []
+        if prototype is not None:
+            seed = [t["dish"] for t in prototype["top"]]
+        if is_food_final and display not in seed:
+            seed = [display] + seed
+        candidates, seen_c = [], set()
+        for nm in seed + list(ranked_dishes.keys()):
+            k = nm.lower()
+            if k not in seen_c:
+                seen_c.add(k)
+                candidates.append(nm)
         jt0 = time.time()
         jev_result = jevmod.decide(raw, candidates)
         jev_ms = round((time.time() - jt0) * 1000)
@@ -432,28 +446,46 @@ async def classify(
                 (not jev_result["isFood"] and not is_food_final)
                 or (jev_result["choice"] == embedding_name)
             )
-            is_food_final = jev_result["isFood"]
-            source = "jev"
-            if is_food_final:
-                display = jev_result["choice"]
-                display_key = _key(display)
-                info = catalog_by_key.get(display_key)
-                dish = (
-                    {
-                        "name": info.get("name", display),
-                        "course": info.get("course", ""),
-                        "flavor": info.get("flavor", ""),
-                        "diet": info.get("diet", ""),
-                        "region": info.get("region", ""),
-                        "state": info.get("state", ""),
-                        "ingredients": info.get("ingredients", ""),
-                    }
-                    if info
-                    else None
-                )
+            # When Jev is unsure (low confidence) and disagrees with a confident
+            # khana prototype, trust the prototype — the 80 curated dishes are
+            # the reliable core; Jev only overrides them when it's confident.
+            khana_reliable = (
+                prototype is not None
+                and prototype.get("fromKhana")
+                and prototype.get("used")
+                and embedding_source == "prototype"
+            )
+            keep_khana = (
+                khana_reliable
+                and jev_result["confidence"] < JEV_MIN_CONFIDENCE
+                and not jev_result["agreesWithEmbedding"]
+            )
+            if keep_khana:
+                jev_result["overriddenByKhana"] = True
+                # leave the embedding verdict (display/dish/source) untouched
             else:
-                display = "Not Food"
-                dish = None
+                is_food_final = jev_result["isFood"]
+                source = "jev"
+                if is_food_final:
+                    display = jev_result["choice"]
+                    display_key = _key(display)
+                    info = catalog_by_key.get(display_key)
+                    dish = (
+                        {
+                            "name": info.get("name", display),
+                            "course": info.get("course", ""),
+                            "flavor": info.get("flavor", ""),
+                            "diet": info.get("diet", ""),
+                            "region": info.get("region", ""),
+                            "state": info.get("state", ""),
+                            "ingredients": info.get("ingredients", ""),
+                        }
+                        if info
+                        else None
+                    )
+                else:
+                    display = "Not Food"
+                    dish = None
 
     return {
         "isFood": is_food_final,
