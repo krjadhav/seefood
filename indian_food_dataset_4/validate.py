@@ -15,7 +15,9 @@ def main():
     assert len(recipes) == len(csv_rows) == report['recipe_count']
     assert len({r['url'] for r in recipes}) == len(recipes), 'Duplicate final URLs'
     for row, csv_row in zip(recipes, csv_rows):
-        assert row['title'] and row['ingredients'] and row['instructions'], row['url']
+        assert row['title'] and row['ingredients'], row['url']
+        if not row['instructions']:
+            assert any(a.get('warnings') for a in audit if a['url'].rstrip('/') == row['url'].rstrip('/')), row['url']
         assert isinstance(row['ingredients'], list), row['url']
         assert isinstance(row['instructions'], str), row['url']
         for key, value in row.items():

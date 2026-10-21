@@ -16,7 +16,8 @@ python3 -m venv .venv
 Requests are limited to two starts per second per host, with four concurrent
 requests per host, robots.txt checks, timeouts and bounded retries for 429/5xx.
 Sitemaps are traversed recursively; Bong Eats uses its public recipe index.
-Recipe cards require a title, ingredients and instructions. Editorial article
+Recipe cards require a title and ingredients. Missing written instructions are
+preserved as an empty string and flagged in the URL audit. Editorial article
 text, comments, and image binaries are not included.
 
 `.cache/` stores per-URL results for resumability and is not committed. Use

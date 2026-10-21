@@ -46,6 +46,7 @@ class Site:
         self.delay = delay
         self.lock = threading.Lock()
         self.last = 0
+        self.cooldown_until = 0
         self.robot = None
         self.errors = []
         self.cache = ROOT / '.cache' / host
@@ -58,7 +59,7 @@ class Site:
             raise PermissionError('robots.txt disallows ' + url)
         for attempt in range(3):
             with self.lock:
-                time.sleep(max(0, self.last + self.delay - time.monotonic()))
+                time.sleep(max(0, max(self.last + self.delay, self.cooldown_until) - time.monotonic()))
                 self.last = time.monotonic()
             try:
                 r = requests.get(url, headers={'User-Agent': UA}, timeout=(15, 60))
@@ -68,9 +69,20 @@ class Site:
                 time.sleep(5 * (attempt + 1))
                 continue
             if r.status_code == 429 or r.status_code >= 500:
+                if r.status_code == 429:
+                    retry = r.headers.get('Retry-After', '')
+                    from email.utils import parsedate_to_datetime
+                    try:
+                        wait = float(retry) if retry.isdigit() else (parsedate_to_datetime(retry).timestamp() - time.time())
+                    except (ValueError, TypeError):
+                        wait = 60
+                    with self.lock:
+                        self.delay = max(1, min(10, self.delay * 2))
+                        self.cooldown_until = max(self.cooldown_until, time.monotonic() + max(60, wait))
                 if attempt < 2:
                     retry = r.headers.get('Retry-After', '')
-                    time.sleep(min(120, int(retry)) if retry.isdigit() else 5 * (attempt + 1))
+                    if r.status_code != 429:
+                        time.sleep(int(retry) if retry.isdigit() else 5 * (attempt + 1))
                     continue
             r.raise_for_status()
             if re.search(br'charset\s*=\s*["\']?utf-8', r.content[:8192], re.I):
@@ -156,10 +168,13 @@ class Site:
             if self.host == 'www.bongeats.com' and not data['instructions']:
                 steps = scraper.soup.select('.recipe-process ul li')
                 data['instructions'] = '\n'.join(step.get_text(' ', strip=True) for step in steps)
-            if data['title'] and data['ingredients'] and data['instructions']:
+            if data['title'] and data['ingredients']:
+                if not data['instructions']:
+                    data['instructions'] = ''
+                    result['warnings'] = ['Source recipe has no extractable written instructions']
                 result.update(status='ok', recipe=data)
             else:
-                result.update(status='no_recipe', reason='Missing title, ingredients, or instructions')
+                result.update(status='no_recipe', reason='Missing title or ingredients')
         except Exception as e:
             status = 'no_recipe' if type(e).__name__ == 'NoSchemaFoundInWildMode' else 'error'
             result.update(status=status, error=type(e).__name__ + ': ' + str(e))

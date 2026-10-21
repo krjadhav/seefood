@@ -16,6 +16,21 @@ HTML = '''<html><script type="application/ld+json">{
 }</script></html>'''
 
 class CollectorTests(unittest.TestCase):
+    def test_rate_limit_sets_shared_cooldown(self):
+        limited = requests.Response()
+        limited.status_code = 429
+        limited.headers['Retry-After'] = '90'
+        limited._content = b''
+        success = requests.Response()
+        success.status_code = 200
+        success._content = b'ok'
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scrape, 'ROOT', Path(tmp)):
+            site = scrape.Site('example.com', 0)
+            with patch('scrape.requests.get', side_effect=[limited, success]), patch('scrape.time.sleep') as sleep:
+                self.assertIs(site.get('https://example.com/dal'), success)
+                self.assertGreaterEqual(site.delay, 1)
+                self.assertTrue(any(call.args[0] > 89 for call in sleep.call_args_list))
+
     def test_html_charset_overrides_requests_latin1_default(self):
         response = requests.Response()
         response.status_code = 200
