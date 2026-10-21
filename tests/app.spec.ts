@@ -41,6 +41,37 @@ function verdict({
         { dish: 'pulao', similarity: 0.19 },
       ],
     },
+    dish: isFood
+      ? {
+          name,
+          course: 'snack',
+          flavor: 'spicy',
+          diet: 'vegetarian',
+          region: 'South',
+          state: '',
+          ingredients: 'rice, lentils',
+        }
+      : null,
+    described: isFood
+      ? [
+          {
+            name: 'Dosa',
+            similarity: 0.74,
+            course: 'snack',
+            flavor: 'spicy',
+            region: 'South',
+            hasPhoto: false,
+          },
+          {
+            name: prototypeDish,
+            similarity: 0.73,
+            course: 'snack',
+            flavor: 'spicy',
+            region: 'South',
+            hasPhoto: true,
+          },
+        ]
+      : [],
     metadata: {
       model: 'google/embeddinggemma-2',
       architecture: 'EmbeddingGemma2Model',
@@ -49,7 +80,8 @@ function verdict({
       embeddingDim: 768,
       embeddingNorm: 1.0,
       imageTokens: 280,
-      candidateLabels: 224,
+      candidateLabels: 448,
+      catalogDishes: 255,
       dishPrototypes: 80,
       protoScoring: 'mean-centered cosine',
       softmaxTemperature: 0.05,
@@ -133,7 +165,11 @@ test('result panel lists top matches, prototype match, and metadata', async ({
   await expect(readout.getByText('FOOD', { exact: true })).toBeVisible()
   await expect(readout.getByText('Dish photo prototypes')).toBeVisible()
   await expect(readout.getByText('used for name')).toBeVisible()
+  await expect(readout.getByText('Dish info')).toBeVisible()
+  await expect(readout.getByText('Closest described dishes')).toBeVisible()
+  await expect(readout).toContainText('rice, lentils')
   await expect(readout).toContainText('google/embeddinggemma-2')
+  await expect(readout).toContainText('255')
   await expect(readout).toContainText('80')
   await expect(readout).toContainText('768')
   await expect(readout).toContainText('12 ms')
