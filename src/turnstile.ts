@@ -43,11 +43,25 @@ function ensureWidget(): boolean {
   return true
 }
 
+// Wait up to ~6s for the async-loaded Turnstile script to define window.turnstile.
+function waitForApi(): Promise<Turnstile | null> {
+  if (ts()) return Promise.resolve(ts() ?? null)
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const timer = setInterval(() => {
+      if (ts() || Date.now() - started > 6000) {
+        clearInterval(timer)
+        resolve(ts() ?? null)
+      }
+    }, 100)
+  })
+}
+
 // Resolves to a token, or '' if Turnstile isn't available (dev) or times out —
 // the caller sends it as the cf-turnstile-response header.
-export function getTurnstileToken(timeoutMs = 8000): Promise<string> {
-  const api = ts()
-  if (!api || !ensureWidget() || widgetId === null) return Promise.resolve('')
+export async function getTurnstileToken(timeoutMs = 8000): Promise<string> {
+  const api = await waitForApi()
+  if (!api || !ensureWidget() || widgetId === null) return ''
   return new Promise<string>((resolve) => {
     let done = false
     const finish = (t: string) => {
