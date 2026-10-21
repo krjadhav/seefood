@@ -11,6 +11,9 @@ playwright-report/
 # Local model weights (download separately, ~1.4 GB)
 google_embeddinggemma_2/
 
+# Dish image dataset (~6.7 GB); only the derived server/prototypes.npz is tracked
+indian_food_dataset*/
+
 # Python backend
 __pycache__/
 *.pyc
