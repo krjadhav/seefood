@@ -10,9 +10,15 @@ The main screen follows the supplied reference: a bright red logo header, black-
 ## How recognition works
 
 The image and the candidate labels share one multimodal embedding space. The
-backend embeds the pasted image, cosine-ranks a list of food and non-food
-labels against it, and returns the top food name — or `Not Food` when a non-food
-label wins. See [`server/README.md`](server/README.md).
+backend embeds the pasted image and cosine-ranks food/non-food text labels to
+decide **food vs. Not Food**. For food, it names the specific dish by matching
+the image against **visual prototypes** — averaged photo centroids per dish,
+built from the Indian food dataset — which lifts dish accuracy well above text
+labels alone (~0.95 vs ~0.75 top-1 on held-out images). See
+[`server/README.md`](server/README.md).
+
+Dishes outside the ~80-dish prototype set (e.g. a plain burger) are named by
+the nearest prototype, so recognition is strongest on the dataset's dishes.
 
 ## Run locally
 
