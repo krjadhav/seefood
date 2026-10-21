@@ -249,13 +249,14 @@ async def classify(image: UploadFile = File(...)) -> dict:
             "ingredients": info["ingredients"],
         }
 
-    # Closest described dishes (image-to-description text match over the CSV
-    # catalog). Surfaces the long tail — including dishes with no photo
-    # prototype — with their full descriptions, independent of the verdict.
+    # Catalog dishes ranked by image-to-description similarity (descriptions are
+    # text, so this is a coarse semantic match, not the verdict).
     proto_keys: set = _state.get("proto_keys", set())
+    cat_order = [i for i in order if is_cat[i]]
+
+    # Closest described dishes (compact, with scores) for the panel.
     described = []
     if is_food_final:
-        cat_order = [i for i in order if is_food[i] and is_cat[i]]
         for i in cat_order[:TOP_K]:
             d = catalog_by_key.get(keys[i], {})
             described.append(
@@ -269,6 +270,20 @@ async def classify(image: UploadFile = File(...)) -> dict:
                 }
             )
 
+    # Full copyable ranking: top 254 dishes as {name: {facts}}, no scores,
+    # ordered by similarity (JSON preserves insertion order).
+    ranked_dishes: dict = {}
+    for i in cat_order[:254]:
+        d = catalog_by_key.get(keys[i], {})
+        ranked_dishes[names[i]] = {
+            "course": d.get("course", ""),
+            "flavor": d.get("flavor", ""),
+            "diet": d.get("diet", ""),
+            "region": d.get("region", ""),
+            "state": d.get("state", ""),
+            "ingredients": d.get("ingredients", ""),
+        }
+
     return {
         "isFood": is_food_final,
         "name": display,
@@ -280,6 +295,7 @@ async def classify(image: UploadFile = File(...)) -> dict:
         "prototype": prototype,
         "dish": dish,
         "described": described,
+        "rankedDishes": ranked_dishes,
         "metadata": {
             "model": MODEL_NAME,
             "architecture": "EmbeddingGemma2Model",
