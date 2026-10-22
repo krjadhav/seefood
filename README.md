@@ -1,4 +1,4 @@
-# SeeFood
+# SeeFood - The Shazam for Food
 
 <p align="center">
   <img src="assets/seefood-demo.gif" alt="SeeFood demo" width="320">
