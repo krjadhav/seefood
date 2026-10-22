@@ -4,11 +4,11 @@
   <img src="assets/seefood-demo.gif" alt="SeeFood demo" width="320">
 </p>
 
-No this does not have 8 octopus recipes. It doesn't just do "hotdogs" and "not hotdogs". SeeFood can now "see" over n foods.
+No this does not have 8 octopus recipes. It doesn't just do "hotdogs" and "not hotdogs". SeeFood can now "see" over *n* foods.
 
 It uses Google’s **EmbeddingGemma 2** to retrieve candidates and Typesafe AI's **Jev** image API to choose among them.
 
-PS. I know I could have used an image model or just called Google Lens, but that wouldn’t have been any fun.
+PS. I know I could have used an image model or just called Google Lens, but that wouldn’t have been any fun :)
 
 ## Run locally
 
@@ -17,7 +17,7 @@ Requires Node.js 20.19+ or 22.12+, Python 3.11+, and the model weights [Embeddin
 Then start the backend and frontend.
 
 ## Journey
-I started by testing whether Gemma embeddings alone would be enough. Google has probably trained the model on food from around the world, and because it comes with a vision encoder, I could embed a photo and compare it against reference embeddings using cosine similarity. On Indian food, though, it did poorly. It called a dosa a pancake.
+I started by testing whether Gemma embeddings alone would be enough. Google has probably trained the model on food from around the world, and because it comes with a vision encoder, I could embed a photo and compare it against reference embeddings using cosine similarity. On Indian food, though, it did poorly. It called a *dosa* a pancake.
 
 <p align="center">
   <img src="assets/dosa_as_pancake.png" alt="Dosa As Pancake" width="320">
@@ -31,7 +31,7 @@ Claude suggested the cause might be **anisotropy**, where embeddings cluster aro
 
 The improvement was large. Dishes became much easier to tell apart, so the useful signal had been there all along, hidden under what the photos had in common.
 
-With the 80 dishes working well, I went back to the original test, the hot dog. Hot dogs weren’t in the dataset, and the classifier called it a pepperoni pizza. It also missed dishes like upma that the dataset didn’t cover. When I looked at the scores, the right answer scored lower than the wrong one, and I didn’t know why or how to fix it.
+With the 80 dishes working well, I went back to the original test, the hot dog. Hot dogs weren’t in the dataset, and the classifier called it a pepperoni pizza. It also missed dishes like *upma* that the dataset didn’t cover. When I looked at the scores, the right answer scored lower than the wrong one, and I didn’t know why or how to fix it.
 
 <p align="center">
   <img src="assets/hotdog_as_pepperoni_pizza.png" alt="Hotdog as Pepperoni Pizza" width="320">
