@@ -95,7 +95,7 @@ const samples: Photo[] = [
   { url: '/images/hotdog.jpg', name: 'Hot dog' },
   { url: '/images/pizza.jpg', name: 'Pizza' },
   { url: '/images/biryani.jpg', name: 'Biryani' },
-  { url: '/images/samosa.jpg', name: 'Samosa' },
+  { url: '/images/burger.jpg', name: 'Burger' },
   { url: '/images/gulabjamun.jpg', name: 'Gulab jamun' },
   { url: '/images/dosa.jpg', name: 'Masala dosa' },
 ]
