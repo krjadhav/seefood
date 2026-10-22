@@ -209,8 +209,14 @@ prototype; otherwise let the model own the long tail and the food/not-food call.
 
 ## Part 3 — The system, assembled
 
-Boxes below are labeled with their Google Cloud product names (which map to the
-official Google Cloud product icon set) and the external services.
+![SeeFood architecture](SeeFood-architecture.png)
+
+*The diagram above uses the official Google Cloud product icons. The editable
+source is `SeeFood-architecture.drawio` (open in [diagrams.net](https://app.diagrams.net));
+`SeeFood-architecture.svg` is the vector version.*
+
+The same structure in text — boxes are labeled with their Google Cloud product
+names and the external services.
 
 ```
                         ┌──────────────────────────────┐
