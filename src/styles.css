@@ -469,9 +469,10 @@ main {
   text-transform: capitalize;
 }
 .result-banner h2.long {
-  font-size: 23px;
+  font-size: 30px;
+  padding: 0 52px;
   -webkit-text-stroke-width: 4px;
-  line-height: 1.05;
+  line-height: 1;
 }
 .photo-state.result {
   isolation: isolate;
