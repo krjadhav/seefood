@@ -1,107 +1,64 @@
 # SeeFood
 
-A mobile-first PWA recreating the SeeFood interface from _Silicon Valley_, now
-wired to a real classifier. Instead of only "Hotdog / Not Hotdog", it names the
-food it sees (or says **Not Food**) using a local **EmbeddingGemma 2** model.
-Built with React, TypeScript, and Vite, with a small FastAPI backend.
+<p align="center">
+  <img src="assets/seefood-demo.gif" alt="SeeFood demo" width="320">
+</p>
 
-The main screen follows the supplied reference: a bright red logo header, black-outlined white lettering, a white tagline strip, stacked salmon/pasta photography, and large text over the photos. Evaluation uses a ring of red dots and outlined lettering; results use a green top banner (food name) or red bottom banner (Not Food) with a large check or cross, plus a side panel showing the model's top label matches and metadata.
+No this does not have 8 octopus recipes. It doesn't just do "hotdogs" and "not hotdogs". SeeFood can now "see" over n foods.
 
-## How recognition works
+It uses Google’s **EmbeddingGemma 2** to retrieve candidates and Typesafe AI's **Jev** image API to choose among them.
 
-The image and the candidate labels share one multimodal embedding space. The
-backend embeds the pasted image and cosine-ranks food/non-food text labels to
-decide **food vs. Not Food**. For food, it names the specific dish by matching
-the image against **visual prototypes** — averaged photo centroids per dish,
-built from the Indian food dataset — which lifts dish accuracy well above text
-labels alone (~0.95 vs ~0.75 top-1 on held-out images). See
-[`server/README.md`](server/README.md).
-
-Dishes outside the ~80-dish prototype set (e.g. a plain burger) are named by
-the nearest prototype, so recognition is strongest on the dataset's dishes.
+PS. I know I could have used an image model or just called Google Lens, but that wouldn’t have been any fun.
 
 ## Run locally
 
-Requires Node.js 20.19+ or 22.12+, Python 3.11+, and the model weights in
-`google_embeddinggemma_2/`.
+Requires Node.js 20.19+ or 22.12+, Python 3.11+, and the model weights [EmbeddingGemma 2](https://deepmind.google/models/gemma/embeddinggemma/) in `google_embeddinggemma_2/`.
 
-Start the backend (first run downloads Python deps and is slow to warm up):
+Then start the backend and frontend.
 
-```sh
-pip install -r server/requirements.txt
-uvicorn main:app --app-dir server --port 8000
-```
+## Journey
+I started by testing whether Gemma embeddings alone would be enough. Google has probably trained the model on food from around the world, and because it comes with a vision encoder, I could embed a photo and compare it against reference embeddings using cosine similarity. On Indian food, though, it did poorly. It called a dosa a pancake.
 
-Then the frontend (Vite proxies `/api` to the backend on port 8000):
+<p align="center">
+  <img src="assets/dosa_as_pancake.png" alt="Dosa As Pancake" width="320">
+</p>
 
-```sh
-npm ci
-npm run dev
-```
+To give it better references, I used the [Khana dataset](https://khana.omkarprabhu.in/), which has 80 common dishes with 40 images each. I embedded every reference photo and averaged the embeddings for each dish, hoping that this average, a kind of **visual prototype**, would be more reliable than any single photo.
 
-Open the local URL printed by Vite, then paste, drop, upload, or scan a photo.
-To test the production build and offline behavior:
+Then I ran into a strange problem. Almost every food image had a cosine similarity of about 0.9 with almost every dish prototype. Even when the correct dish ranked first, it usually won by a tiny margin.
 
-```sh
-npm run build
-npm run preview
-```
+Claude suggested the cause might be **anisotropy**, where embeddings cluster around a few common directions. Food photos seemed to occupy a narrow region of the embedding space, and what they shared which was enough to classify “this is food” but made it hard to differentiate between foods. To remove that shared signal, I used **mean centering**: averaged all the prototypes and subtracted that average from each one.
 
-## What works
+The improvement was large. Dishes became much easier to tell apart, so the useful signal had been there all along, hidden under what the photos had in common.
 
-- Paste images anywhere with Cmd/Ctrl + V, or use the desktop Paste button.
-- Drag and drop images or select a file.
-- On mobile, Scan food opens the device’s camera-capable file picker using `capture="environment"`. The exact chooser depends on the device and browser.
-- Preview local images, replace them, and reset. Uploads never leave the browser and aren’t persisted.
-- Validate file type, 20 MB size limit, and image decoding. Supported formats: JPEG, PNG, WebP, GIF, AVIF. Convert HEIC images to JPEG or PNG first.
-- Send the image to the local backend, show an `Evaluating...` state, then the recognized food name or `Not Food`.
-- Read the side panel: the top label matches with cosine scores and the full model metadata (device, dtype, embedding dimension and norm, image tokens, inference time, image and upload size).
-- Try three sample photos routed through the same classifier.
-- Install through a supported browser’s PWA prompt or follow the built-in home-screen instructions.
-- Reload offline after the production service worker has installed. The app shell, sample images, and fonts are cached locally.
-- Keyboard focus states, accessible controls, screen reader announcements, and reduced-motion support.
+With the 80 dishes working well, I went back to the original test, the hot dog. Hot dogs weren’t in the dataset, and the classifier called it a pepperoni pizza. It also missed dishes like upma that the dataset didn’t cover. When I looked at the scores, the right answer scored lower than the wrong one, and I didn’t know why or how to fix it.
 
-## Scope and privacy
+<p align="center">
+  <img src="assets/hotdog_as_pepperoni_pizza.png" alt="Hotdog as Pepperoni Pizza" width="320">
+</p>
 
-Recognition runs against the **local** FastAPI backend — images are posted to
-`/api/classify` on your own machine, not to any third-party service. There are
-no API keys, accounts, or analytics. If the backend isn't running, the UI shows
-a clear error instead of a result.
+I still wanted to recognize dishes beyond those 80, so I scraped several recipe sites and added about 10,000 images. That made things worse in new ways. With thousands of possible matches, non-food detection fell apart, and a spoon came back as a dessert. A single reference image could now outrank a prototype built from many, so on a real samosa, one spring roll photo might beat my samosa prototype. And the classifier began returning wrong names with complete confidence.
 
-Clipboard button access requires HTTPS or localhost and browser permission. Standard keyboard paste is the fallback. Camera capture is a browser/device capability; the frontend does not directly request a live camera stream.
+I did notice that the correct dish usually ranked near the top of the retrieved results, though it could land anywhere in the top 10, 20 or even 25. Instead of tuning Gemma further to make the final call, I split the job in two: **Gemma retrieves candidates, and Jev decides between them**. which is cheating a bit.
 
-## Checks
+Jev image API accepts up to 255 choices, so I pass it the top 254 candidates plus a “not food” option. Accuracy improved enormously. It still makes mistakes, but I haven’t seen anything bizarre, and I can usually see why it went wrong. It mistook thatte idli for neer dosa, for example, and a blurry close-up of a lemon for "besan ladoo".
 
-```sh
-npm run build
-npm test
-```
+## Deployment
 
-Tests use locally installed Google Chrome. In CI, they use Playwright Chromium; install it with `npx playwright install --with-deps chromium`. Playwright starts the production preview server automatically and **mocks `/api/classify`**, so the model backend is not needed to run tests. Tests cover desktop and mobile viewports, the Evaluating → result flow, the Not Food verdict, the metadata panel, backend-outage errors, paste, drag-and-drop, invalid files, camera chooser wiring, and offline reloads.
+<p align="center">
+  <img src="assets/system_design.png" alt="System Design" width="560">
+</p>
 
-```sh
-npm run format
-```
+The embedding model could run in the browser, but I chose to run it in the cloud. Since I didn’t train or fine-tune the model, self-hosting made little sense, and Google’s hosted multimodal embedding model, which bills per request, should be cheaper.
 
-## Deploy
+I also baked the index into the build instead of rebuilding it at startup, because computing it on every cold start would hammer the embedding API and slow the container down. One caveat: the hosted model produces 1,408-dimensional embeddings, while the one I tested locally produced 768, so accuracy in production may differ from what I measured.
 
-Deploy `dist/` to any HTTPS static host **at the domain root**. The manifest, service worker, and asset URLs use `/`; subdirectory hosting such as `/seefood/` needs base-path changes first. No server-side runtime or environment variables are needed. Serve `sw.js` with revalidation (`Cache-Control: no-cache`), and use long-lived caching for Vite’s content-hashed assets. Service workers register only in production. Updates activate when existing app tabs close, avoiding a forced refresh mid-upload.
+This set up costs me **$0.25 per 1000 calls**
 
-The GitHub repository stores source code; pushing it does not deploy a public website.
+I haven't tested it extensively so please send it whatever's on your plate and if it gets something wrong raise an issue, I'm curious.
 
-## Assets
+and maybe someday...
 
-All UI icons are Lucide icons (ISC license). The hotdog illustration and app icons are custom SVG artwork. Fonts are self-hosted under the SIL Open Font License, included in `public/fonts/licenses/`:
-
-- [DM Sans](https://fonts.google.com/specimen/DM+Sans)
-- [Titan One](https://fonts.google.com/specimen/Titan+One)
-
-Sample photography is downloaded from Unsplash and bundled for offline use:
-
-- [Hotdog, Jessica Loaiza](https://unsplash.com/photos/glqTtszXfM0)
-- [Pizza](https://images.unsplash.com/photo-1513104890138-7c749659a591)
-- [Burger](https://images.unsplash.com/photo-1551782450-a2132b4ba21d)
-- [Salmon, Anna Volkova](https://unsplash.com/photos/LeU-Tdabc5E)
-- [Shrimp pasta, Eduardo Gonzalez](https://unsplash.com/photos/rqnK9xwDg5c)
-
-See the [Unsplash license](https://unsplash.com/license).
+<p align="center">
+  <img src="assets/seefood_sold_to_periscope.png" alt="SeeFood Acquisition" width="640">
+</p>
