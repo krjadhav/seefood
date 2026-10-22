@@ -242,43 +242,6 @@ prototype↔catalog key matching all stay consistent (keys are
 
 ---
 
-## 9. Frontend / testing learnings
-
-- **"Evaluating" state must survive an instant backend.** With a mocked API the
-  loading state flashed too fast for Playwright to catch; add a small artificial
-  delay in the route mock so the transient UI is observable.
-- **Strict-mode double matches.** The dish name renders in *both* the result
-  banner and the readout panel, so `getByRole('heading', {name})` matched two
-  elements and failed strict mode. Scope to `.result-banner h2`.
-- **Clipboard tests + the Chrome channel use the real system clipboard**, so two
-  clipboard tests running in parallel raced and flaked (a different test failed
-  each run). Stub `navigator.clipboard.writeText` in `addInitScript` to capture
-  the copied text instead of touching the OS clipboard.
-- **Headless `fullPage` screenshots can composite a ghost** of a prior paint
-  (old text bled through). Verifying DOM node *counts* (`.readout` = 1,
-  `.result-banner` = 1) proved the overlap was a screenshot artifact, not real
-  markup. Prefer element screenshots + assertions over eyeballing fullPage.
-- **Mock the backend in tests** with `page.route('**/api/classify', ...)` so the
-  suite stays fast and model-free; `/api/dishes` is a GET and doesn't disturb
-  the "posts exactly one request" assertion.
-
----
-
-## 10. The "feel fast" animation
-
-The evaluation animation doubles as a latency mask for the upcoming Jev step.
-Learnings on making it *feel* instant:
-- Show the **actual retrieved dishes** (the ranked 254), not a generic list —
-  it reads as "it already found all this."
-- **Density + speed sell it:** three columns scrolling at different speeds
-  (one reversed), ~11px, brighter than a faint watermark, beat a single slow
-  faint column.
-- A **rapid count-up** ("N / 254 dishes scanned", ~600 ms via
-  `requestAnimationFrame`) conveys throughput better than a static number.
-- Honor `prefers-reduced-motion` (the global reset already freezes the scroll).
-
----
-
 ## 11. Thresholds, for reference (empirically tuned, not universal)
 
 ```
@@ -550,3 +513,133 @@ committed artifact in?" The durable guards: the **vector-length tripwire**
 The softer lesson — name migrated artifacts by space (`prototypes.vertex1408.npz`)
 and let the running deploy read from the build context, not from whatever git
 state happens to be checked out.
+
+---
+
+## 18. TypeSafe Jev as the decision stage — and reading an SDK over its docs
+
+The hand-tuned threshold routing (§5–6, §11) was always brittle: every new
+dataset forced a re-tune. Jev (TypeSafe's System One model) replaces it. The
+embedding does **retrieval** (ranks the catalog into a shortlist); Jev makes the
+**decision**.
+
+- **The docs lagged the SDK; the SDK was the source of truth.** The public docs
+  said state is text-only and showed no image path. The installed `typesafe-sdk`
+  exposed `system_one(..., assets={name: Image})` and `Image.from_pil`. Reading
+  the package (`inspect.signature`, the `response_types`/`assets` modules)
+  revealed the real contract: Jev **can take the image as an asset** and is a
+  genuine multimodal decider, not a text-only reranker. When docs and installed
+  code disagree, trust the code — but gate it (below).
+- **Image input is experimental, behind a header.** The first call failed with
+  `400 Images are experimental. Send TypeSafe-Danger-Zone-Images: true`. Preview
+  features are often one header away and one release from changing — so they sit
+  behind a kill-switch and an embedding fallback.
+- **Choice fits the problem exactly.** A Choice question takes **up to 255
+  options**; the retrieved **254 dishes + "No food"** is exactly 255. The
+  response gives `.choice`, `.confidence`, `.probabilities`. On the sample sweep
+  Jev nailed every case at 0.5–1.0 confidence in ~330–750 ms — it *sees* the
+  dosa, picks `masala dosa`, and answers `No food` for a document.
+- **Confidence is the control signal.** TypeSafe's guidance: ≥0.9 act, 0.5–0.9
+  proceed with care, <0.5 don't act alone. We don't trust Jev blindly — low
+  confidence routes back to the reliable prototype (§20).
+- **The decision never sees the thresholds.** With Jev deciding, the embedding's
+  `KHANA_FLOOR`/`TARLA_TRUST` constants matter far less: they only shape the
+  fallback and the shortlist, not the headline verdict. The brittle part shrank.
+
+---
+
+## 19. The "only my site" lock — why origin checks aren't enough
+
+Opening a browser-callable API means anyone can replay the request from `curl`.
+The security work was layering defenses by what each one actually stops, and
+being honest about the gap at each layer.
+
+- **CORS and Origin checks are a speed bump, not a lock.** CORS is enforced by
+  *browsers*, so it blocks other websites' JavaScript but does nothing to
+  `curl`. A server-side `Origin`/`Referer` allowlist blocks casual `curl`, but
+  the header is trivially spoofable (`curl -H "Origin: …"`). Proven live: the
+  spoofed-origin request that we *expected* to pass, passed.
+- **The daily cap is the money backstop.** A global counter that only increments
+  on paid Vertex calls, returning 429 past N/day. Even a spoofer who forges the
+  origin cannot run the bill past the cap. This is the one layer that *guarantees*
+  no runaway spend. In-memory with `max-instances=1` keeps a single authoritative
+  counter (a durable cap would use Firestore).
+- **Cloudflare Turnstile is the actual lock.** The browser mints a short-lived,
+  single-use token (bound to the domain via a challenge); the backend verifies
+  it with Cloudflare `siteverify` (secret in Secret Manager) and checks
+  `success` + `action` + `hostname`. A `curl` can't forge one. Spoofing the
+  origin no longer helps — no token, 403. Verified live: curl with no token and
+  curl with a fake token both 403; the real site still classifies.
+- **A test key isolated a config bug from a code bug.** The widget wouldn't
+  render on the domain (no iframe, silent). Rendering Cloudflare's always-pass
+  **test key** (`1x0000…AA`) on the same page *did* mint a token — proving the
+  wiring worked and the real key's **hostname allowlist** was the problem
+  (dashboard-side, invisible to code). A known-good credential is the fastest way
+  to split "my code" from "their config".
+- **Automation can't test an anti-automation control.** Turnstile Managed mode
+  silently declines a Playwright browser — exactly its job — so the happy path is
+  only verifiable on a real human device. Build the control, then hand the final
+  check to a person.
+- **Fail closed, but don't fail the whole app.** `siteverify` unreachable → 503
+  (don't spend a Vertex call on an unverifiable request). But a misconfigured
+  widget would 403 *every* real user, so enforcement is an env flag: ship it
+  **off**, confirm the happy path on a real device, then flip it **on** with a
+  15-second `gcloud run services update` — no rebuild.
+
+Defense in depth, each layer labeled by what it stops:
+
+```
+CORS pinned        → other websites' browsers
+Origin allowlist   → casual curl                (spoofable)
+Per-IP rate limit  → rapid bursts
+Daily cap (500)    → total spend / bankruptcy   ← the money backstop
+Turnstile token    → scripted abuse, spoofed origin  ← the real lock
+```
+
+---
+
+## 20. Full long-tail coverage — the quota wall and the confidence guard
+
+Loading all ~7k Tarla dishes (catalog text + single-image prototypes) in the
+Vertex space hit two walls, each with a general lesson.
+
+### The quota wall: pace under the limit, don't crash into it
+
+Building the ~7k-label embedding cache crawled for *hours*. Root cause: the
+embedder fanned out with a thread pool and **burst past the 600/min online
+quota**, which triggered `429 ResourceExhausted`; the exponential backoff then
+dominated, so throughput collapsed far below the limit. The fix was a **rate
+limiter that paces request *starts*** to ~480/min (a safe margin under 600) so
+429s essentially never fire. A steady 14-minute build replaced an open-ended
+crawl. The lesson generalizes: with a hard rate quota, **shape traffic to stay
+under it**; reactive backoff is a safety net, not a throughput strategy.
+
+Corollary — **bake, don't rebuild.** Embedding 7k labels on every cold start
+would hammer the quota and make the container slow to become ready. Precomputing
+the cache and shipping it in the image drops cold start to ~5 s and zero
+startup Vertex calls. The `.gcloudignore` deliberately *includes* the gitignored
+cache so the build context carries it.
+
+### The accuracy wall: more candidates, more look-alikes
+
+With 7k dishes, the retrieved shortlist fills with near-duplicates, and Jev —
+seeing a fried samosa — picked "veg fried wontons" at 0.3 confidence. Two fixes:
+
+1. **Seed the shortlist with the visual prototypes.** The 254-candidate list is
+   the prototype's top matches (accurate, visual) *then* the catalog text
+   ranking (noisy), deduped. The right dish is always selectable.
+2. **The khana-reliability guard.** When Jev is **low-confidence (<0.5) and
+   disagrees with a confident khana prototype**, keep the prototype. The 80
+   curated, multi-image dishes are the trustworthy core; Jev overrides them only
+   when it is sure, and otherwise owns the long tail and the food/not-food call.
+
+Result: 8/8 on the sweep — samosa, biryani, and margherita pizza recovered by the
+guard; dosa, gulab jamun, momo, hotdog by Jev; non-food by Jev. The broader point:
+**combine a high-precision narrow signal (khana prototypes) with a
+high-coverage noisy one (Jev over 7k) by letting confidence arbitrate**, rather
+than forcing one to win everywhere.
+
+**Meta-lesson across the whole build:** every capability added coverage *and*
+noise. The durable pattern was never "replace the old signal" but "layer the new
+one and let a calibrated score decide which to trust" — mean-centering over raw
+cosine, curated over catalog, khana over Tarla, prototype over an unsure Jev.
