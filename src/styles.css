@@ -80,13 +80,8 @@ p {
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(
-      90deg,
-      rgba(15, 13, 12, 0.94),
-      rgba(15, 13, 12, 0.84),
-      rgba(15, 13, 12, 0.94)
-    ),
-    url('/images/pasta.jpg') center/cover;
+    linear-gradient(rgba(14, 12, 11, 0.72), rgba(14, 12, 11, 0.72)),
+    url('/images/bg-sticker.jpg') 0 0 / 460px repeat;
   pointer-events: none;
 }
 .site-header {
