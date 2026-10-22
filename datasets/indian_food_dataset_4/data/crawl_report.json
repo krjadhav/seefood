@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-10-21T11:04:54.822403+00:00",
+  "recipe_count": 1458,
+  "sites": [
+    {
+      "source": "www.vegrecipesofindia.com",
+      "discovery_errors": [],
+      "discovered": 1612,
+      "counts": {
+        "no_recipe": 154,
+        "ok": 1458
+      },
+      "processed": 1612
+    }
+  ]
+}

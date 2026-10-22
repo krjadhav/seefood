@@ -5,7 +5,7 @@
 node_modules/
 dist/
 google_embeddinggemma_2/
-indian_food_dataset*/
+datasets/
 test-results/
 playwright-report/
 **/__pycache__/

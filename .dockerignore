@@ -1,6 +1,6 @@
 # Never ship these into the API image.
 google_embeddinggemma_2/
-indian_food_dataset*/
+datasets/
 node_modules/
 dist/
 tests/

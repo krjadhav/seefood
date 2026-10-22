@@ -113,7 +113,7 @@ FOOD_LABELS = [
     "latte",
 ]
 
-# Dishes from indian_food_dataset/labels.txt. These are also the prototype
+# Dishes from datasets/indian_food_dataset/labels.txt. These are also the prototype
 # (visual centroid) names, so a text match and an image match line up.
 INDIAN_LABELS = [
     "aloo gobi",

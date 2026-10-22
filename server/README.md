@@ -21,7 +21,7 @@ no separate vision classifier is needed.
 
 ## Dish catalog (CSV)
 
-`dish_catalog.json` is built from `indian_food_dataset_2/indian_food.csv` and
+`dish_catalog.json` is built from `datasets/indian_food_dataset_2/indian_food.csv` and
 adds ~255 dishes — many with no photos — as rich text labels
 (`"Balu shahi: a sweet vegetarian dessert from East India made with…"`). It is
 used two ways, without changing the prototype verdict:
@@ -39,7 +39,7 @@ python server/build_catalog.py
 
 ## Tarla recipe dataset (.numbers)
 
-`build_tarla.py` parses `indian_food_dataset_3/all_indian_recipes_tarla.numbers`
+`build_tarla.py` parses `datasets/indian_food_dataset_3/all_indian_recipes_tarla.numbers`
 (~6969 recipes) into:
 
 - `tarla_catalog.json` — name, ingredients, image URL, and an embed sentence.
@@ -63,7 +63,7 @@ python server/build_tarla.py --limit 1500
 ## Dish prototypes
 
 `prototypes.npz` holds one averaged "visual centroid" per dish, built from the
-`indian_food_dataset/` photos. The dataset (~6.7 GB) is not committed; the
+`datasets/indian_food_dataset/` photos. The dataset (~6.7 GB) is not committed; the
 derived `.npz` (79 × 768 floats) is. Rebuild it after changing the dish set:
 
 ```sh

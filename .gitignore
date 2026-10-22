@@ -11,9 +11,11 @@ playwright-report/
 # Local model weights (download separately, ~1.4 GB)
 google_embeddinggemma_2/
 
-# Dish image dataset (~6.7 GB); only the derived server/prototypes.npz is tracked
-indian_food_dataset*/
-!indian_food_dataset_4/
+# Raw datasets (multi-GB, build-time only). Only derived server/*.npz is tracked.
+# indian_food_dataset_4 stays tracked (it has committed crawl source); its own
+# datasets/indian_food_dataset_4/.gitignore excludes its large data/ and caches.
+datasets/*
+!datasets/indian_food_dataset_4/
 
 # Python backend
 __pycache__/
@@ -23,3 +25,10 @@ venv/
 
 # Derived label-embedding cache (rebuilt on startup from the committed labels)
 server/label_emb_cache.npz
+
+# Large rebuilt artifact (baked into the deploy image via .gcloudignore)
+server/tarla_prototypes.npz
+
+# Local scratch / provider-migration backups — never commit
+server/_local_space/
+server/*.vertex*.npz

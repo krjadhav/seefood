@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CSV = ROOT / "indian_food_dataset_2" / "indian_food.csv"
+CSV = ROOT / "datasets" / "indian_food_dataset_2" / "indian_food.csv"
 OUT = Path(__file__).resolve().parent / "dish_catalog.json"
 
 MISSING = {"-1", "", "nan", "none", None}

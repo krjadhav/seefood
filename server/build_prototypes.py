@@ -22,7 +22,7 @@ from embed import get_embedder
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = str(ROOT / "google_embeddinggemma_2")
-DATASET = ROOT / "indian_food_dataset"
+DATASET = ROOT / "datasets" / "indian_food_dataset"
 OUT = Path(__file__).resolve().parent / "prototypes.npz"
 HOLDOUT = 5  # images per dish reserved for threshold calibration
 

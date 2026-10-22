@@ -22,11 +22,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-NUMBERS = ROOT / "indian_food_dataset_3" / "all_indian_recipes_tarla.numbers"
+NUMBERS = ROOT / "datasets" / "indian_food_dataset_3" / "all_indian_recipes_tarla.numbers"
 HERE = Path(__file__).resolve().parent
 CATALOG_OUT = HERE / "tarla_catalog.json"
 PROTO_OUT = HERE / "tarla_prototypes.npz"
-IMG_CACHE = ROOT / "indian_food_dataset_3" / "images"  # gitignored
+IMG_CACHE = ROOT / "datasets" / "indian_food_dataset_3" / "images"  # gitignored
 
 
 def key_of(name: str) -> str:
