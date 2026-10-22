@@ -27,7 +27,7 @@ venv/
 server/label_emb_cache.npz
 
 # Large rebuilt artifact (baked into the deploy image via .gcloudignore)
-server/tarla_prototypes.npz
+server/*.npz
 
 # Local scratch / provider-migration backups — never commit
 server/_local_space/
