@@ -821,6 +821,26 @@ footer > span {
   font-size: 9px;
   color: #8f8580;
 }
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #e9ded8;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid #50433e;
+  border-radius: 999px;
+  background: #28201e;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.github-link:hover {
+  background: #342926;
+  border-color: #6b5a53;
+}
 .info-panel {
   display: flex;
   gap: 15px;

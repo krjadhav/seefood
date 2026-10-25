@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getTurnstileToken } from './turnstile'
-import { Camera, Check, Info, RotateCcw, Upload, X } from 'lucide-react'
+import { Camera, Check, Github, Info, RotateCcw, Upload, X } from 'lucide-react'
 
 type Photo = { url: string; name: string }
 type Label = {
@@ -560,7 +560,17 @@ export default function App() {
           </div>
         </section>
       </main>
-      <footer></footer>
+      <footer>
+        <a
+          className="github-link"
+          href="https://github.com/krjadhav/seefood"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Github size={14} />
+          View on GitHub
+        </a>
+      </footer>
     </div>
   )
 }
